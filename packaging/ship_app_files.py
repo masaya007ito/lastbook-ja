@@ -57,14 +57,17 @@ def main():
     out = Path(sys.argv[1])
     (out / 'web').mkdir(parents=True, exist_ok=True)
     (out / 'content' / 'topics').mkdir(parents=True, exist_ok=True)
+    (out / 'content' / 'topics-ja').mkdir(parents=True, exist_ok=True)
     written = []
     for p in sorted((ROOT / 'web').iterdir()):
         if p.is_file() and p.name not in EDITS['never_ship'] and p.name != '.DS_Store':
             shutil.copyfile(p, out / 'web' / p.name)
             written.append(out / 'web' / p.name)
-    for rel in ['gaps.json'] + [f'topics/{p.name}' for p in sorted((ROOT / 'content' / 'topics').glob('*.json'))]:
+    ja = (['gaps-ja.json'] if (ROOT / 'content' / 'gaps-ja.json').is_file() else []) + \
+        [f'topics-ja/{p.name}' for p in sorted((ROOT / 'content' / 'topics-ja').glob('*.json'))]   # Japanese words for the same guides
+    for rel in ['gaps.json'] + [f'topics/{p.name}' for p in sorted((ROOT / 'content' / 'topics').glob('*.json'))] + ja:
         data = clean(json.loads((ROOT / 'content' / rel).read_text(encoding='utf-8')))
-        if rel == 'gaps.json':
+        if rel in ('gaps.json', 'gaps-ja.json'):
             data.pop('_about', None)
         (out / 'content' / rel).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
         written.append(out / 'content' / rel)
