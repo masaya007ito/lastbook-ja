@@ -12,14 +12,14 @@
 
   function view(s) {
     const btn = (t) => `<button class="btn plain" data-upd="check">${t}</button>`;
-    const ver = s.current ? `Version ${E(s.current)}.` : 'This copy has no version number (it was not built as an app).';
+    const ver = s.current ? tr('Version {version}.', { version: E(s.current) }) : tr('This copy has no version number (it was not built as an app).');
     switch (s.state) {
-      case 'checking': return `${ver} Checking for updates…`;
-      case 'up_to_date': return `${ver} Lastbook is up to date. ${btn('Check again')}`;
-      case 'available': return `${ver} Version ${E(s.version)} is available. Download it from ${E(s.website)}. Your library, local AI and chats stay. ${btn('Check again')}`;
-      case 'not_published': return `${ver} No update information yet. ${btn('Try again')}`;
-      case 'too_old_os': case 'error': return `${ver} ${E(s.message)} ${btn('Try again')}`;
-      default: return `${ver} ${btn('Check for updates')}`;
+      case 'checking': return `${ver} ${tr('Checking for updates…')}`;
+      case 'up_to_date': return `${ver} ${tr('Lastbook is up to date.')} ${btn(tr('Check again'))}`;
+      case 'available': return `${ver} ${tr('Version {version} is available. Download it from {website}. Your library, local AI and chats stay.', { version: E(s.version), website: E(s.website) })} ${btn(tr('Check again'))}`;
+      case 'not_published': return `${ver} ${tr('No update information yet.')} ${btn(tr('Try again'))}`;
+      case 'too_old_os': case 'error': return `${ver} ${E(s.message)} ${btn(tr('Try again'))}`;
+      default: return `${ver} ${btn(tr('Check for updates'))}`;
     }
   }
 
@@ -31,7 +31,7 @@
 
   async function refresh(el) {
     if (!el.isConnected) return;
-    try { paint(el, await call('state')) } catch { el.textContent = 'Lastbook could not ask about updates.' }
+    try { paint(el, await call('state')) } catch { el.textContent = tr('Lastbook could not ask about updates.') }
   }
 
   async function check(el) {
@@ -39,11 +39,11 @@
       const s = await call('check');
       if (s.error && !s.state) { el.textContent = s.error; return }
       paint(el, s);
-    } catch { el.textContent = 'Lastbook could not ask about updates.' }
+    } catch { el.textContent = tr('Lastbook could not ask about updates.') }
   }
 
   window.LBUpdate = {
-    card: () => '<div class="card"><b>Lastbook app</b><small id="updBox">…</small></div>',
+    card: () => `<div class="card"><b>${tr('Lastbook app')}</b><small id="updBox">…</small></div>`,
     mount(root) {
       const el = root.querySelector('#updBox'); if (!el) return;
       el.addEventListener('click', e => { if (e.target.closest('[data-upd]')) check(el) });

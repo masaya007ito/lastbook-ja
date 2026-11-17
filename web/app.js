@@ -5,6 +5,7 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fileUrl = p => '/' + String(p || '').split('/').map(encodeURIComponent).join('/');
 const main = $('#main');
+applyI18n();   // the page's own words in the chosen language already, so the first route reads them (sidebar tooltips)
 const IN_WINDOW = location.protocol === 'lastbook:' || location.hostname === 'lastbook.invalid';   // the desktop app, not a browser over the server
 
 /* ---------------------------------------------------------------- icons -- */
@@ -43,8 +44,8 @@ const KIND_ICO = { pdf: 'page', html: 'page', video: 'video', transcript: 'video
 const TC = { hurt: '#c62828', water: '#1565c0', power: '#c77700', food: '#d4570f', shelter: '#7b3fa0', sanitation: '#7a5232', disaster: '#b23c17', comms: '#00796b',
   grow: '#2e7d32', preserve: '#a0661a', health: '#c2185b', repair: '#455a64', energy: '#e09400', land: '#5d7a2e' };
 // Short names for tiles; the full title shows on the guide page.
-const SHORT = { hurt: 'Injury & illness', water: 'Drinking water', power: 'Power is out', food: 'Food & cooking', shelter: 'Too hot or cold', sanitation: 'Toilets & hygiene',
-  disaster: 'Quake, fire, flood', comms: 'Contact & find way', grow: 'Grow food', preserve: 'Preserve food', health: 'Health care', repair: 'Repair & build', energy: 'Power systems', land: 'Land & resources' };
+const SHORT = { hurt: tr('Injury & illness'), water: tr('Drinking water'), power: tr('Power is out'), food: tr('Food & cooking'), shelter: tr('Too hot or cold'), sanitation: tr('Toilets & hygiene'),
+  disaster: tr('Quake, fire, flood'), comms: tr('Contact & find way'), grow: tr('Grow food'), preserve: tr('Preserve food'), health: tr('Health care'), repair: tr('Repair & build'), energy: tr('Power systems'), land: tr('Land & resources') };
 const tcStyle = id => `style="--tc:${TC[id] || '#1a6b55'}"`;
 
 /* ------------------------------------------------------------ storage -- */
@@ -53,7 +54,7 @@ const store = {
   set(k, v) { try { localStorage.setItem('sg.' + k, JSON.stringify(v)) } catch { } },
 };
 // A row as the lists show it: its title and the subtitle under it. Two rows that read the same are one row, whatever their keys.
-const rowSub = x => x.sub && x.sub !== x.title ? x.sub : x.key[0] === 'w' ? 'Encyclopedia' : '';
+const rowSub = x => x.sub && x.sub !== x.title ? x.sub : x.key[0] === 'w' ? tr('Encyclopedia') : '';
 const rowId = x => x.title + '|' + rowSub(x);
 function remember(item) {  // {key,title,href,sub}
   const r = store.get('recent', []).filter(x => x.key !== item.key && rowId(x) !== rowId(item));
@@ -64,13 +65,13 @@ const isSaved = key => store.get('saved', []).some(x => x.key === key);
 function savedCount() { const el = $('#savedN'); if (el) el.textContent = store.get('saved', []).length || '' }
 function toggleSave(item, btn) {
   let s = store.get('saved', []);
-  if (s.some(x => x.key === item.key)) { s = s.filter(x => x.key !== item.key); toast('Removed from Saved') }
-  else { s.unshift({ ...item, at: Date.now() }); toast('Saved on this device') }
+  if (s.some(x => x.key === item.key)) { s = s.filter(x => x.key !== item.key); toast(tr('Removed from Saved')) }
+  else { s.unshift({ ...item, at: Date.now() }); toast(tr('Saved on this device')) }
   store.set('saved', s);
   savedCount();
-  if (btn) { btn.setAttribute('aria-pressed', isSaved(item.key)); const sp = $('span', btn); if (sp) sp.textContent = isSaved(item.key) ? 'Saved' : 'Save' }
+  if (btn) { btn.setAttribute('aria-pressed', isSaved(item.key)); const sp = $('span', btn); if (sp) sp.textContent = isSaved(item.key) ? tr('Saved') : tr('Save') }
 }
-const saveButton = item => `<button class="btn plain" title="Save" data-save='${esc(JSON.stringify(item))}' aria-pressed="${isSaved(item.key)}">${ico('save')}<span>${isSaved(item.key) ? 'Saved' : 'Save'}</span></button>`;
+const saveButton = item => `<button class="btn plain" title="${tr('Save')}" data-save='${esc(JSON.stringify(item))}' aria-pressed="${isSaved(item.key)}">${ico('save')}<span>${isSaved(item.key) ? tr('Saved') : tr('Save')}</span></button>`;
 document.addEventListener('click', e => { const b = e.target.closest('[data-save]'); if (b) toggleSave(JSON.parse(b.dataset.save), b) });
 let toastT;
 function toast(msg) {
@@ -97,8 +98,8 @@ function setVprog(id, data) { const p = vprog(); p[id] = { ...(p[id] || {}), ...
 /* --------------------------------------------------------------- data -- */
 async function api(u, opts) {
   const r = await fetch(u, opts);
-  let d; try { d = await r.json() } catch { throw new Error('The library sent an unreadable reply.') }
-  if (!r.ok || (d && d.error && !Array.isArray(d))) throw new Error(d && d.error || ('Server error ' + r.status));
+  let d; try { d = await r.json() } catch { throw new Error(tr('The library sent an unreadable reply.')) }
+  if (!r.ok || (d && d.error && !Array.isArray(d))) throw new Error(d && d.error || tr('Server error {n}', { n: r.status }));
   return d;
 }
 let LIB = null;
@@ -117,13 +118,13 @@ const nowTopics = () => NOW_ORDER.map(topicById).filter(Boolean).concat((TOPICS 
 const learnTopics = () => LEARN_ORDER.map(topicById).filter(Boolean).concat((TOPICS || []).filter(t => t.mode === 'learn' && !LEARN_ORDER.includes(t.id)));
 
 /* ------------------------------------------------------------ helpers -- */
-const fmtDur = s => { if (!s) return ''; s = Math.round(s); const h = s / 3600 | 0, m = (s % 3600) / 60 | 0; return h ? `${h} h ${m} min` : m ? `${m} min` : `${s} s` };
+const fmtDur = s => { if (!s) return ''; s = Math.round(s); const h = s / 3600 | 0, m = (s % 3600) / 60 | 0; return h ? tr('{h} h {m} min', { h, m }) : m ? tr('{m} min', { m }) : tr('{s} s', { s }) };
 const clock = s => { s = Math.max(0, Math.round(s || 0)); const h = s / 3600 | 0, m = (s % 3600) / 60 | 0, x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0') };
 const here = () => location.hash || '#/videos';
 const fromQ = () => 'from=' + encodeURIComponent(here());
 const pageImg = (id, p, w) => `/api/page/${encodeURIComponent(id)}/${p || 1}.png?w=${w}`;
 const hostOf = u => { try { return new URL(u).host } catch { return u } };   // a web address shown as its site only
-const askLink = (about, label = 'Ask about this') => `<a class="btn plain" title="${esc(label)}" href="#/ask?about=${encodeURIComponent(about)}&${fromQ()}">${ico('ask')}<span>${label}</span></a>`;
+const askLink = (about, label = tr('Ask about this')) => `<a class="btn plain" title="${esc(label)}" href="#/ask?about=${encodeURIComponent(about)}&${fromQ()}">${ico('ask')}<span>${label}</span></a>`;
 
 function hrefFor(item, src) {
   src = src || item.src || item;
@@ -133,12 +134,12 @@ function hrefFor(item, src) {
   return `#/read/${encodeURIComponent(src.id)}?${item.page ? 'p=' + item.page + '&' : ''}${fromQ()}`;
 }
 function srcText(s, page) {
-  if (!s) return 'Source not found in this library copy';
-  const bits = [`<strong>${esc(s.publisher || s.collection || 'Unknown publisher')}</strong>`];
+  if (!s) return tr('Source not found in this library copy');
+  const bits = [`<strong>${esc(s.publisher || s.collection || tr('Unknown publisher'))}</strong>`];
   if (s.year) bits.push(esc(s.year));
-  if (page) bits.push('page ' + page + (s.pages ? ' of ' + s.pages : ''));
-  else if (s.kind === 'pdf' && s.pages) bits.push(s.pages + ' pages');
-  if (s.duration) bits.push(fmtDur(s.duration) + (s.transcript ? ' · transcript' : ''));
+  if (page) bits.push(s.pages ? tr('page {page} of {pages}', { page, pages: s.pages }) : tr('page {page}', { page }));
+  else if (s.kind === 'pdf' && s.pages) bits.push(tr('{n} pages', { n: s.pages }));
+  if (s.duration) bits.push(fmtDur(s.duration) + (s.transcript ? ' · ' + tr('transcript') : ''));
   return bits.join(' · ');
 }
 // A reading card shows a picture of what you'll open: the actual page, the video frame, or an encyclopedia mark.
@@ -147,10 +148,10 @@ function rcard(item) {
   let pv;
   if (item.zim) pv = `<span class="pv w">${ico('wiki')}</span>`;
   else if (s && s.kind === 'video') pv = `<span class="pv v">${s.thumb ? `<img loading="lazy" alt="" src="${fileUrl(s.thumb)}">` : ''}<span class="play"><span>${ico('play')}</span></span>${s.duration ? `<span class="pg">${clock(s.duration)}</span>` : ''}</span>`;
-  else if (s && s.kind === 'pdf') pv = `<span class="pv"><img loading="lazy" alt="" src="${pageImg(s.id, item.page, 360)}" onerror="this.remove()"><span class="pg">${item.page ? 'p. ' + item.page : 'PDF'}</span></span>`;
+  else if (s && s.kind === 'pdf') pv = `<span class="pv"><img loading="lazy" alt="" src="${pageImg(s.id, item.page, 360)}" onerror="this.remove()"><span class="pg">${item.page ? tr('p. {n}', { n: item.page }) : 'PDF'}</span></span>`;
   else pv = `<span class="pv w">${ico('page')}</span>`;
   const label = item.label || item.title || (s && s.title);
-  const src = item.zim ? `<strong>Encyclopedia</strong> · ${esc(item.title || '')} · community-written` : `${s ? 'From “' + esc(s.title) + '” · ' : ''}${srcText(s, item.page)}<br>${esc(s ? s.trust : '')}`;
+  const src = item.zim ? `<strong>${tr('Encyclopedia')}</strong> · ${esc(item.title || '')} · ${tr('community-written')}` : `${s ? tr('From “{title}”', { title: esc(s.title) }) + ' · ' : ''}${srcText(s, item.page)}<br>${esc(s ? s.trust : '')}`;
   return `<a class="rcard" href="${hrefFor(item)}">${pv}<span><b>${esc(label)}</b>${item.note ? `<p>${esc(item.note)}</p>` : ''}<span class="src">${src}</span></span></a>`;
 }
 function rowItem(item) {
@@ -158,7 +159,7 @@ function rowItem(item) {
   let k = ico(item.zim ? 'wiki' : s ? KIND_ICO[s.kind] : 'page');
   if (s && s.kind === 'video' && s.thumb) k = `<img loading="lazy" alt="" src="${fileUrl(s.thumb)}">`;
   else if (s && s.kind === 'pdf' && (item.page || item.preview)) k = `<img loading="lazy" alt="" src="${pageImg(s.id, item.page, 200)}" onerror="this.remove()">`;
-  const sub = item.zim ? 'Encyclopedia article · community-written' : srcText(s, item.page);
+  const sub = item.zim ? tr('Encyclopedia article · community-written') : srcText(s, item.page);
   return `<li><a class="row" href="${hrefFor(item)}"><span class="k">${k}</span><span><b>${esc(item.label || item.title || (s && s.title))}</b><small>${sub}</small></span></a></li>`;
 }
 function vcard(v, opts = {}) {
@@ -166,11 +167,11 @@ function vcard(v, opts = {}) {
   const pct = p && p.t && (v.duration || p.d) ? Math.min(100, 100 * p.t / (v.duration || p.d)) : 0;
   return `<a class="vcard" href="#/watch/${encodeURIComponent(v.id)}?${fromQ()}" ${opts.style || ''}>
     <span class="vthumb">${v.thumb ? `<img loading="lazy" alt="" src="${fileUrl(v.thumb)}" onerror="this.remove()">` : `<span class="ph">${ico('video')}</span>`}
-      ${v.transcript ? '<span class="cc" title="Has a transcript">CC</span>' : ''}${v.duration ? `<span class="dur">${clock(v.duration)}</span>` : ''}${pct > 2 ? `<span class="prog" style="width:${pct}%"></span>` : ''}<span class="play">${ico('play')}</span></span>
+      ${v.transcript ? `<span class="cc" title="${tr('Has a transcript')}">CC</span>` : ''}${v.duration ? `<span class="dur">${clock(v.duration)}</span>` : ''}${pct > 2 ? `<span class="prog" style="width:${pct}%"></span>` : ''}<span class="play">${ico('play')}</span></span>
     <b>${esc(v.title)}</b><span class="vm">${esc(opts.sub || v.publisher || '')}</span></a>`;
 }
 function rail(html, cls = '') {
-  return `<div class="rail-wrap"><button class="rail-btn l" aria-label="Scroll left" hidden>${ico('back')}</button><div class="rail ${cls}">${html}</div><button class="rail-btn r" aria-label="Scroll right">${ico('right')}</button></div>`;
+  return `<div class="rail-wrap"><button class="rail-btn l" aria-label="${tr('Scroll left')}" hidden>${ico('back')}</button><div class="rail ${cls}">${html}</div><button class="rail-btn r" aria-label="${tr('Scroll right')}">${ico('right')}</button></div>`;
 }
 function wireRails(root = main) {
   $$('.rail-wrap', root).forEach(w => {
@@ -183,21 +184,21 @@ function wireRails(root = main) {
 }
 const secHead = (title, sub, link) => `<div class="sec-head"><div><h2>${title}</h2>${sub ? `<span class="sub">${sub}</span>` : ''}</div>${link || ''}</div>`;
 function crumbs(list) {
-  return `<nav class="crumbs" aria-label="You are here">${list.map((c, i) => i < list.length - 1 ? `<a href="${c[1]}">${esc(c[0])}</a><span aria-hidden="true">›</span>` : `<span aria-current="page">${esc(c[0])}</span>`).join('')}</nav>`;
+  return `<nav class="crumbs" aria-label="${tr('You are here')}">${list.map((c, i) => i < list.length - 1 ? `<a href="${c[1]}">${esc(c[0])}</a><span aria-hidden="true">›</span>` : `<span aria-current="page">${esc(c[0])}</span>`).join('')}</nav>`;
 }
-function backButton(from, fallback = 'Back') {
+function backButton(from, fallback = tr('Back')) {
   let label = fallback, href = from || '#/';
   const m = /^#\/t\/([\w-]+)/.exec(href);
   if (m && topicById(m[1])) label = SHORT[m[1]] || topicById(m[1]).title;
-  else if (href.startsWith('#/search')) label = 'Search results';
-  else if (href.startsWith('#/ask')) label = 'Back to chat';
-  else if (href.startsWith('#/saved')) label = 'Saved';
-  else if (href.startsWith('#/map')) label = 'Map';
-  else if (href.startsWith('#/videos')) label = 'Videos';
-  else if (href.startsWith('#/watch')) label = 'Video';
-  else if (href.startsWith('#/read')) label = 'Back to page';
-  else if (href.startsWith('#/library') || href.startsWith('#/shelf') || href.startsWith('#/collection') || href.startsWith('#/encyclopedias') || href.startsWith('#/prepare')) label = 'Library';
-  else if (href === '#/' || href === '#') label = 'Videos';
+  else if (href.startsWith('#/search')) label = tr('Search results');
+  else if (href.startsWith('#/ask')) label = tr('Back to chat');
+  else if (href.startsWith('#/saved')) label = tr('Saved');
+  else if (href.startsWith('#/map')) label = tr('Map');
+  else if (href.startsWith('#/videos')) label = tr('Videos');
+  else if (href.startsWith('#/watch')) label = tr('Video');
+  else if (href.startsWith('#/read')) label = tr('Back to page');
+  else if (href.startsWith('#/library') || href.startsWith('#/shelf') || href.startsWith('#/collection') || href.startsWith('#/encyclopedias') || href.startsWith('#/prepare')) label = tr('Library');
+  else if (href === '#/' || href === '#') label = tr('Videos');
   return `<a class="back" href="${esc(href)}" data-back>${ico('back')}<span>${esc(label)}</span></a>`;
 }
 // Links into readers carry where you came from; refresh it at click time (sections may have opened since render).
@@ -213,8 +214,8 @@ document.addEventListener('click', e => {
   if (a && !location.hash.startsWith('#/wiki/') && navAt > 0 && navStack[navAt - 1] === a.getAttribute('href')) { e.preventDefault(); history.back() }
 });
 function errorBox(e, what) {
-  return `<div class="err" role="alert"><b>${esc(what || 'Something went wrong.')}</b><br>${esc(e.message || e)}
-  <br><span class="small">If this keeps happening, close Lastbook and open it again.</span></div>`;
+  return `<div class="err" role="alert"><b>${esc(what || tr('Something went wrong.'))}</b><br>${esc(e.message || e)}
+  <br><span class="small">${tr('If this keeps happening, close Lastbook and open it again.')}</span></div>`;
 }
 // The window title, and on reading pages the toolbar's title and the line under it.
 // bar: what the toolbar shows when it is not the page's own title (an article names itself; the toolbar names the encyclopedia).
@@ -293,7 +294,7 @@ async function route() {
     else if (v === 'collection') await collectionPage(q.get('name') || '', q.get('from'));
     else if (v === 'about') await about();
     else notFound();
-  } catch (e) { setTitle(''); document.body.className = 'v-error'; main.innerHTML = emptyState('warn', 'This page could not be opened', e.message || e) }   // v-error: not a reading page, so a phone keeps its tab bar
+  } catch (e) { setTitle(''); document.body.className = 'v-error'; main.innerHTML = emptyState('warn', tr('This page could not be opened'), e.message || e) }   // v-error: not a reading page, so a phone keeps its tab bar
   wireRails(); dock(); barState();
   $('#topQ').value = '';
   const big = $('main h1'); if (big) h1seen.observe(big);
@@ -350,7 +351,7 @@ const h1seen = new IntersectionObserver(es => html.classList.toggle('h1-gone', !
 function railTitles() { const icons = html.classList.contains('compact') && !html.classList.contains('side-open'); $$('.side a.row-s').forEach(a => icons ? a.title = $('span', a).textContent : a.removeAttribute('title')) }
 addEventListener('resize', railTitles);
 // The toolbar's field says only 'Search' when it is too narrow for the whole hint, as Windows' and the Mac's own narrow fields do
-new ResizeObserver(() => { const q = $('#topQ'); if (q.clientWidth) q.placeholder = q.clientWidth < 175 ? 'Search' : 'Search the library' }).observe($('#topQ'));
+new ResizeObserver(() => { const q = $('#topQ'); if (q.clientWidth) q.placeholder = q.clientWidth < 175 ? tr('Search') : tr('Search the library') }).observe($('#topQ'));
 // At 900 and wider a page's .dock controls (view switch, Save, Ask) sit in the toolbar; narrower they stay in the page.
 const docks = () => wide.matches || (!MAC && innerWidth >= 640);
 function dock() {
@@ -412,10 +413,10 @@ document.addEventListener('keydown', e => {
     else if (document.activeElement === $('#topQ')) { $('#topQ').value = ''; $('#topQ').blur() }
   }
 });
-function notFound() { setTitle('Not found'); main.innerHTML = emptyState('search', 'That page isn’t here', 'The link may be from an older version of the guide.') }
-const emptyState = (icon, title, text) => `<div class="empty"><span class="e-ico">${ico(icon)}</span><b>${esc(title)}</b><p>${esc(text)}</p><p class="e-act"><a class="btn plain" href="#/">Go to Videos</a></p></div>`;
-function searchBox(id, value, placeholder, button = 'Search') {
-  return `<form class="bigsearch" role="search" id="${id}F">${ico('search')}<label class="sr" for="${id}">Search</label><input id="${id}" type="search" autocomplete="off" value="${esc(value || '')}" placeholder="${esc(placeholder)}" enterkeyhint="search"><button>${button}</button></form>`;
+function notFound() { setTitle(tr('Not found')); main.innerHTML = emptyState('search', tr('That page isn’t here'), tr('The link may be from an older version of the guide.')) }
+const emptyState = (icon, title, text) => `<div class="empty"><span class="e-ico">${ico(icon)}</span><b>${esc(title)}</b><p>${esc(text)}</p><p class="e-act"><a class="btn plain" href="#/">${tr('Go to Videos')}</a></p></div>`;
+function searchBox(id, value, placeholder, button = tr('Search')) {
+  return `<form class="bigsearch" role="search" id="${id}F">${ico('search')}<label class="sr" for="${id}">${tr('Search')}</label><input id="${id}" type="search" autocomplete="off" value="${esc(value || '')}" placeholder="${esc(placeholder)}" enterkeyhint="search"><button>${button}</button></form>`;
 }
 
 /* --------------------------------------------------------------- home -- */
@@ -426,33 +427,33 @@ async function home() {
   const pins = (await libInfo()).pins !== false;
   main.innerHTML = `
   <section class="hero">
-    <h1>What do you need?</h1>
-    <p class="lead">Pick what’s happening, search in your own words, or ask the library a question.</p>
-    ${searchBox('bigQ', '', innerWidth < 500 ? 'e.g. boil water' : 'e.g. boil water, deep cut, no power')}
-    <div class="chips examples" aria-label="Example searches">${['boil water', 'cut won’t stop bleeding', 'fridge after power cut', 'burn', 'toilet not working', 'smell gas'].map(x => `<a class="chip" href="#/search?q=${encodeURIComponent(x)}">${esc(x)}</a>`).join('')}</div>
+    <h1>${tr('What do you need?')}</h1>
+    <p class="lead">${tr('Pick what’s happening, search in your own words, or ask the library a question.')}</p>
+    ${searchBox('bigQ', '', innerWidth < 500 ? tr('e.g. boil water') : tr('e.g. boil water, deep cut, no power'))}
+    <div class="chips examples" aria-label="${tr('Example searches')}">${['boil water', 'cut won’t stop bleeding', 'fridge after power cut', 'burn', 'toilet not working', 'smell gas'].map(x => `<a class="chip" href="#/search?q=${encodeURIComponent(x)}">${esc(x)}</a>`).join('')}</div>
   </section>
-  ${secHead('Need help now')}
+  ${secHead(tr('Need help now'))}
   <div class="needs">${nowTopics().map(tile).join('')}</div>
-  <div class="banners"><a class="banner chatb" href="#/ask"><span class="ico">${ico('ask')}</span><span><b>Ask the library</b><small>Get an answer built from the manuals, with the exact pages and video moments it came from</small></span><span class="go">${ico('right')}</span></a>
-  <a class="banner map" href="#/map"><span class="ico">${ico('pin')}</span><span>${pins ? '<b>Find help nearby</b><small>Hospitals, pharmacies, water taps and fire stations on an offline map</small>' : '<b>Find a place</b><small>Main roads, towns and water on an offline map</small>'}</span><span class="go">${ico('right')}</span></a></div>
-  ${cont.length ? secHead('Pick up where you left off') + rail(cont.join('')) : ''}
+  <div class="banners"><a class="banner chatb" href="#/ask"><span class="ico">${ico('ask')}</span><span><b>${tr('Ask the library')}</b><small>${tr('Get an answer built from the manuals, with the exact pages and video moments it came from')}</small></span><span class="go">${ico('right')}</span></a>
+  <a class="banner map" href="#/map"><span class="ico">${ico('pin')}</span><span>${pins ? `<b>${tr('Find help nearby')}</b><small>${tr('Hospitals, pharmacies, water taps and fire stations on an offline map')}</small>` : `<b>${tr('Find a place')}</b><small>${tr('Main roads, towns and water on an offline map')}</small>`}</span><span class="go">${ico('right')}</span></a></div>
+  ${cont.length ? secHead(tr('Pick up where you left off')) + rail(cont.join('')) : ''}
   <div id="homeVideos"></div>
-  ${secHead('Learn a skill', 'Step-by-step routes for the weeks and months ahead', '<a href="#/library">All skills</a>')}
-  ${rail(learnTopics().map(t => `<a class="skill" href="#/t/${t.id}" ${tcStyle(t.id)}><span class="ico">${ico(t.id)}</span><b>${esc(SHORT[t.id] || t.title)}</b><small>${esc(t.short || '')}</small><span class="steps">${(t.route || []).length} steps</span></a>`).join(''), 'skills')}
-  <a class="banner prep" href="#/prepare"><span class="ico">${ico('prep')}</span><span><b>Get ready before it happens</b><small>Store water and food, plan for outages, pack kits</small></span><span class="go">${ico('right')}</span></a>`;
+  ${secHead(tr('Learn a skill'), tr('Step-by-step routes for the weeks and months ahead'), `<a href="#/library">${tr('All skills')}</a>`)}
+  ${rail(learnTopics().map(t => `<a class="skill" href="#/t/${t.id}" ${tcStyle(t.id)}><span class="ico">${ico(t.id)}</span><b>${esc(SHORT[t.id] || t.title)}</b><small>${esc(t.short || '')}</small><span class="steps">${tr('{n} steps', { n: (t.route || []).length })}</span></a>`).join(''), 'skills')}
+  <a class="banner prep" href="#/prepare"><span class="ico">${ico('prep')}</span><span><b>${tr('Get ready before it happens')}</b><small>${tr('Store water and food, plan for outages, pack kits')}</small></span><span class="go">${ico('right')}</span></a>`;
   $('#bigQF').addEventListener('submit', e => { e.preventDefault(); location.hash = '#/search?q=' + encodeURIComponent($('#bigQ').value.trim()) });
   const ex = $('.examples', main), exEnd = () => { ex.classList.toggle('at-end', ex.scrollLeft + ex.clientWidth >= ex.scrollWidth - 4); ex.classList.toggle('at-start', ex.scrollLeft < 4) };
   ex.addEventListener('scroll', exEnd, { passive: true }); exEnd(); window.onresize = exEnd;
   try {
     const rows = await api('/api/videos');
     const g = rows.find(r => r.id === 'guides');
-    if (g && $('#homeVideos')) { $('#homeVideos').innerHTML = secHead('Watch how it’s done', 'Videos picked for the guides', '<a href="#/videos">All videos</a>') + rail(g.items.slice(0, 14).map(v => vcard(v, { style: tcStyle(v.guide) })).join('')); wireRails($('#homeVideos')) }
+    if (g && $('#homeVideos')) { $('#homeVideos').innerHTML = secHead(tr('Watch how it’s done'), tr('Videos picked for the guides'), `<a href="#/videos">${tr('All videos')}</a>`) + rail(g.items.slice(0, 14).map(v => vcard(v, { style: tcStyle(v.guide) })).join('')); wireRails($('#homeVideos')) }
   } catch { }
 }
 async function continueItems() {
   const out = [], rec = await recents();
   (await resumable(12)).slice(0, 6)
-    .forEach(([id, v]) => out.push(vcard({ id, title: v.title, thumb: v.thumb, duration: v.d }, { sub: 'Resume at ' + clock(v.t) })));
+    .forEach(([id, v]) => out.push(vcard({ id, title: v.title, thumb: v.thumb, duration: v.d }, { sub: tr('Resume at {time}', { time: clock(v.t) }) })));
   rec.filter(r => !r.key.startsWith('v:')).slice(0, 8).forEach(r => out.push(`<a class="mini" href="${esc(r.href)}"><small>${esc(r.sub || '')}</small><b>${esc(r.title)}</b></a>`));
   return out;
 }
@@ -467,38 +468,38 @@ async function topicPage(id, open) {
   const t = topicById(id);
   if (!t) return notFound();
   setTitle(t.title);
-  remember({ key: 't:' + id, title: t.title, href: '#/t/' + id, sub: t.mode === 'learn' ? 'Learning route' : 'Guide' });
+  remember({ key: 't:' + id, title: t.title, href: '#/t/' + id, sub: t.mode === 'learn' ? tr('Learning route') : tr('Guide') });
   const learn = t.mode === 'learn';
   const progress = store.get('progress', {});
   const sits = (t.choices || []).map(c => c.goto
     ? `<div class="sit"><a href="#/t/${esc(c.goto)}"><span class="dot"></span><span class="tx"><b>${esc(c.label)}</b>${c.hint ? `<span>${esc(c.hint)}</span>` : ''}</span><span class="chev">${ico('right')}</span></a></div>`
     : `<div class="sit${open === c.id ? ' open' : ''}" id="c-${esc(c.id)}">
       <button aria-expanded="${open === c.id}" aria-controls="cb-${esc(c.id)}" data-choice="${esc(c.id)}"><span class="dot"></span><span class="tx"><b>${esc(c.label)}</b>${c.hint ? `<span>${esc(c.hint)}</span>` : ''}</span><span class="chev">${ico('down')}</span></button>
-      <div class="body" id="cb-${esc(c.id)}"><div class="rcards">${(c.read || []).map(rcard).join('') || '<p class="muted">Nothing picked for this yet — try searching.</p>'}</div></div></div>`).join('');
-  const limLi = l => `<li>${esc(l.text)}${l.src ? ` <span class="cite">— <a href="${hrefFor(l)}">${esc(l.src.publisher || l.src.title)}${l.page ? ', p. ' + l.page : ''}</a></span>` : l.zim ? ` <span class="cite">— <a href="${hrefFor(l)}">encyclopedia</a></span>` : ''}</li>`;
+      <div class="body" id="cb-${esc(c.id)}"><div class="rcards">${(c.read || []).map(rcard).join('') || `<p class="muted">${tr('Nothing picked for this yet — try searching.')}</p>`}</div></div></div>`).join('');
+  const limLi = l => `<li>${esc(l.text)}${l.src ? ` <span class="cite">— <a href="${hrefFor(l)}">${esc(l.src.publisher || l.src.title)}${l.page ? ', ' + tr('p. {n}', { n: l.page }) : ''}</a></span>` : l.zim ? ` <span class="cite">— <a href="${hrefFor(l)}">${tr('encyclopedia')}</a></span>` : ''}</li>`;
   const LIM = 4, lims = t.limits || [];
-  const limits = lims.length ? `<section class="limits" aria-labelledby="lim"><h2 id="lim">${ico('warn')}Stop and get help when…</h2><ul>${lims.slice(0, LIM).map(limLi).join('')}</ul>${lims.length > LIM ? `<details><summary>Show all ${lims.length} warnings</summary><ul>${lims.slice(LIM).map(limLi).join('')}</ul></details>` : ''}</section>` : '';
-  const disagree = (t.gaps?.disagree || []).length ? `<div class="disagree"><b>Sources disagree</b><ul>${t.gaps.disagree.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
-  const route = (t.route || []).length ? `<h2>Your learning route</h2><p class="muted small">Ticks are your own notes on this device. Reading or watching is not the same as practising safely.</p>
+  const limits = lims.length ? `<section class="limits" aria-labelledby="lim"><h2 id="lim">${ico('warn')}${tr('Stop and get help when…')}</h2><ul>${lims.slice(0, LIM).map(limLi).join('')}</ul>${lims.length > LIM ? `<details><summary>${tr('Show all {n} warnings', { n: lims.length })}</summary><ul>${lims.slice(LIM).map(limLi).join('')}</ul></details>` : ''}</section>` : '';
+  const disagree = (t.gaps?.disagree || []).length ? `<div class="disagree"><b>${tr('Sources disagree')}</b><ul>${t.gaps.disagree.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+  const route = (t.route || []).length ? `<h2>${tr('Your learning route')}</h2><p class="muted small">${tr('Ticks are your own notes on this device. Reading or watching is not the same as practising safely.')}</p>
     <ol class="route">${t.route.map((s, i) => { const k = id + ':' + i, p = progress[k] || {}; return `<li class="step${p.practised ? ' done' : ''}"><h3>${esc(s.title.replace(/^Step \d+:\s*/i, ''))}</h3>${s.goal ? `<p class="goal">${esc(s.goal)}</p>` : ''}
       <div class="rcards">${(s.read || []).map(rcard).join('')}</div>
-      <div class="mark"><label><input type="checkbox" data-prog="${k}" data-f="read" ${p.read ? 'checked' : ''}> I’ve read this</label><label><input type="checkbox" data-prog="${k}" data-f="practised" ${p.practised ? 'checked' : ''}> I’ve practised it with someone who knows</label></div></li>` }).join('')}</ol>` : '';
+      <div class="mark"><label><input type="checkbox" data-prog="${k}" data-f="read" ${p.read ? 'checked' : ''}> ${tr('I’ve read this')}</label><label><input type="checkbox" data-prog="${k}" data-f="practised" ${p.practised ? 'checked' : ''}> ${tr('I’ve practised it with someone who knows')}</label></div></li>` }).join('')}</ol>` : '';
   const sec = (icon, title, items) => items && items.length ? `<details class="more"><summary>${ico(icon)}<span>${title} <span class="n">· ${items.length}</span></span></summary><div class="body"><ul class="list">${items.map(i => rowItem({ ...i, preview: true })).join('')}</ul></div></details>` : '';
   const vids = topicVideos(t);
   const related = (t.related || []).map(topicById).filter(Boolean);
-  main.innerHTML = `<div class="ghero" ${tcStyle(id)}><div class="ghero-in">${crumbs([['Videos', '#/videos'], [learn ? 'Learn a skill' : 'Need help now', learn ? '#/library' : '#/'], [SHORT[id] || t.title]])}
+  main.innerHTML = `<div class="ghero" ${tcStyle(id)}><div class="ghero-in">${crumbs([[tr('Videos'), '#/videos'], [learn ? tr('Learn a skill') : tr('Need help now'), learn ? '#/library' : '#/'], [SHORT[id] || t.title]])}
       <div class="row1"><span class="ico">${ico(t.id)}</span><h1>${esc(t.title)}</h1></div><p class="lead">${esc(t.intro || '')}</p>
-      <div class="vactions" style="margin-bottom:0">${askLink('topic:' + id, 'Ask a question about this')}</div></div></div>
+      <div class="vactions" style="margin-bottom:0">${askLink('topic:' + id, tr('Ask a question about this'))}</div></div></div>
     <div class="gcols" ${tcStyle(id)}><div>
-      ${(t.choices || []).length ? `<p class="ask" id="askh">${learn ? 'Where do you want to start?' : 'What’s happening?'}</p><div class="situations" aria-labelledby="askh">${sits}</div>` : ''}
+      ${(t.choices || []).length ? `<p class="ask" id="askh">${learn ? tr('Where do you want to start?') : tr('What’s happening?')}</p><div class="situations" aria-labelledby="askh">${sits}</div>` : ''}
       <div class="gnarrow">${limits}${disagree}</div>
       ${route}
-      ${vids.length ? secHead('Videos for this', `${vids.length} picked video${vids.length > 1 ? 's' : ''}`) + rail(vids.map(v => vcard(v)).join('')) : ''}
-      ${sec('prep', 'Get ready before it happens', t.prepare)}
-      ${sec('book', 'Go deeper: full manuals & articles', t.learn)}
-      ${(t.gaps?.missing || []).length ? `<details class="more"><summary>${ico('warn')}<span>Not in this library</span></summary><div class="body"><p class="muted small" style="margin-top:0">Looked for but not found when this guide was put together (October 2026):</p><ul>${t.gaps.missing.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div></details>` : ''}
-      ${related.length ? `<h2>Related guides</h2><div class="related">${related.map(r => `<a class="chip" href="#/t/${r.id}" ${tcStyle(r.id)}><span style="color:var(--tc)">${ico(r.id)}</span>${esc(SHORT[r.id] || r.title)}</a>`).join('')}</div>` : ''}
-    </div><aside class="gside" aria-label="Safety"></aside></div>`;
+      ${vids.length ? secHead(tr('Videos for this'), vids.length === 1 ? tr('1 picked video') : tr('{n} picked videos', { n: vids.length })) + rail(vids.map(v => vcard(v)).join('')) : ''}
+      ${sec('prep', tr('Get ready before it happens'), t.prepare)}
+      ${sec('book', tr('Go deeper: full manuals & articles'), t.learn)}
+      ${(t.gaps?.missing || []).length ? `<details class="more"><summary>${ico('warn')}<span>${tr('Not in this library')}</span></summary><div class="body"><p class="muted small" style="margin-top:0">${tr('Looked for but not found when this guide was put together (October 2026):')}</p><ul>${t.gaps.missing.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div></details>` : ''}
+      ${related.length ? `<h2>${tr('Related guides')}</h2><div class="related">${related.map(r => `<a class="chip" href="#/t/${r.id}" ${tcStyle(r.id)}><span style="color:var(--tc)">${ico(r.id)}</span>${esc(SHORT[r.id] || r.title)}</a>`).join('')}</div>` : ''}
+    </div><aside class="gside" aria-label="${tr('Safety')}"></aside></div>`;
   // On wide screens the safety box sits beside the choices so it stays visible.
   const side = $('.gside', main), nar = $('.gnarrow', main);
   const placeSide = () => { if (!side || !nar) return; if (innerWidth >= 1050) { if (!side.firstChild) side.append(...nar.childNodes) } else if (side.firstChild) nar.append(...side.childNodes) };
@@ -519,20 +520,20 @@ async function topicPage(id, open) {
 
 /* ------------------------------------------------------------- videos -- */
 async function videosHome() {
-  setTitle('Videos');
-  main.innerHTML = `<h1>Videos</h1><p class="lead">Watch it done — practical how-tos first, then channels and courses.</p>
-    <div class="vtools">${searchBox('vq', '', 'Search video titles')}</div>
-    <div class="chips" style="margin-top:8px">${[['short', 'Under 10 min'], ['medium', '10–30 min'], ['long', 'Over 30 min']].map(([k, l]) => `<a class="chip" href="#/videos/all?len=${k}">${ico('clock')}${l}</a>`).join('')}</div>
-    <div id="vrows"><p class="loading">Loading videos…</p></div>`;
+  setTitle(tr('Videos'));
+  main.innerHTML = `<h1>${tr('Videos')}</h1><p class="lead">${tr('Watch it done — practical how-tos first, then channels and courses.')}</p>
+    <div class="vtools">${searchBox('vq', '', tr('Search video titles'))}</div>
+    <div class="chips" style="margin-top:8px">${[['short', tr('Under 10 min')], ['medium', tr('10–30 min')], ['long', tr('Over 30 min')]].map(([k, l]) => `<a class="chip" href="#/videos/all?len=${k}">${ico('clock')}${l}</a>`).join('')}</div>
+    <div id="vrows"><p class="loading">${tr('Loading videos…')}</p></div>`;
   $('#vqF').addEventListener('submit', e => { e.preventDefault(); location.hash = '#/videos/all?q=' + encodeURIComponent($('#vq').value.trim()) });
   const rows = await api('/api/videos');
   const cont = (await resumable(20)).slice(0, 12);
   const GCOL = { health: 'hurt', water: 'water', food: 'food', power: 'power', outdoors: 'shelter', repair: 'repair', making: 'land' };
   $('#vrows').innerHTML =
-    (cont.length ? secHead('Continue watching') + rail(cont.map(([id, v]) => vcard({ id, title: v.title, thumb: v.thumb, duration: v.d }, { sub: 'Resume at ' + clock(v.t) })).join('')) : '') +
-    rows.map(r => secHead(esc(r.title), r.note ? esc(r.note) : '', `<a href="#/videos/${r.id}">See all ${r.count}</a>`) +
+    (cont.length ? secHead(tr('Continue watching')) + rail(cont.map(([id, v]) => vcard({ id, title: v.title, thumb: v.thumb, duration: v.d }, { sub: tr('Resume at {time}', { time: clock(v.t) }) })).join('')) : '') +
+    rows.map(r => secHead(esc(r.title), r.note ? esc(r.note) : '', `<a href="#/videos/${r.id}">${tr('See all {n}', { n: r.count })}</a>`) +
       rail(r.items.map(v => vcard(v, { style: tcStyle(v.guide || GCOL[r.id]) })).join(''))).join('') +
-    `<p class="small muted" style="margin-top:24px">Only videos already downloaded are shown. Many have no captions, so the transcript search and the assistant can’t see what’s said in them.</p>`;
+    `<p class="small muted" style="margin-top:24px">${tr('Only videos already downloaded are shown. Many have no captions, so the transcript search and the assistant can’t see what’s said in them.')}</p>`;
   wireRails();
 }
 async function videoRow(row, q) {
@@ -542,17 +543,17 @@ async function videoRow(row, q) {
   let off = 0;
   const first = await api(`/api/videos/${row}?q=${encodeURIComponent(qq)}&len=${len}&sort=${sort}&offset=0`);
   setTitle(first.title);
-  main.innerHTML = `<div>${backButton('#/videos', 'Videos')}</div><h1 style="margin-top:12px">${esc(qq ? 'Videos: “' + qq + '”' : first.title)}</h1>${first.note ? `<p class="lead">${esc(first.note)}</p>` : ''}
-    <div class="vtools">${searchBox('vq', qq, 'Search these videos', 'Go')}
-      <label class="sr" for="vsort">Sort</label><select id="vsort">${[['', 'Most useful first'], ['short', 'Shortest first'], ['new', 'Newest first'], ['az', 'A to Z']].map(([k, l]) => `<option value="${k}" ${k === sort ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-    <div class="chips" style="margin:8px 0 16px">${[['', 'Any length'], ['short', 'Under 10 min'], ['medium', '10–30 min'], ['long', 'Over 30 min']].map(([k, l]) => `<a class="chip ${k === len ? 'on' : ''}" href="${qs({ len: k })}">${l}</a>`).join('')}</div>
-    <p class="muted small">${first.total.toLocaleString()} video${first.total === 1 ? '' : 's'}</p>
+  main.innerHTML = `<div>${backButton('#/videos', tr('Videos'))}</div><h1 style="margin-top:12px">${esc(qq ? tr('Videos: “{q}”', { q: qq }) : first.title)}</h1>${first.note ? `<p class="lead">${esc(first.note)}</p>` : ''}
+    <div class="vtools">${searchBox('vq', qq, tr('Search these videos'), tr('Go'))}
+      <label class="sr" for="vsort">${tr('Sort')}</label><select id="vsort">${[['', tr('Most useful first')], ['short', tr('Shortest first')], ['new', tr('Newest first')], ['az', tr('A to Z')]].map(([k, l]) => `<option value="${k}" ${k === sort ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    <div class="chips" style="margin:8px 0 16px">${[['', tr('Any length')], ['short', tr('Under 10 min')], ['medium', tr('10–30 min')], ['long', tr('Over 30 min')]].map(([k, l]) => `<a class="chip ${k === len ? 'on' : ''}" href="${qs({ len: k })}">${l}</a>`).join('')}</div>
+    <p class="muted small">${first.total === 1 ? tr('1 video') : tr('{n} videos', { n: first.total.toLocaleString() })}</p>
     <div class="vgrid" id="vg"></div><p id="vmore"></p>`;
   $('#vqF').addEventListener('submit', e => { e.preventDefault(); location.hash = qs({ q: $('#vq').value.trim() }) });
   $('#vsort').addEventListener('change', e => { location.hash = qs({ sort: e.target.value }) });
   const add = d => {
-    $('#vg').insertAdjacentHTML('beforeend', d.items.map(v => vcard(v)).join('') || (off ? '' : '<div class="empty" style="grid-column:1/-1">No videos match. Try another word or length.</div>'));
-    $('#vmore').innerHTML = d.more ? '<button class="btn plain" id="vmb">Show more videos</button>' : '';
+    $('#vg').insertAdjacentHTML('beforeend', d.items.map(v => vcard(v)).join('') || (off ? '' : `<div class="empty" style="grid-column:1/-1">${tr('No videos match. Try another word or length.')}</div>`));
+    $('#vmore').innerHTML = d.more ? `<button class="btn plain" id="vmb">${tr('Show more videos')}</button>` : '';
     if (d.more) $('#vmb').onclick = async () => { off += 48; add(await api(`/api/videos/${row}?q=${encodeURIComponent(qq)}&len=${len}&sort=${sort}&offset=${off}`)) };
   };
   add(first);
@@ -562,28 +563,28 @@ async function watch(id, t, from) {
   const d = await api('/api/doc/' + encodeURIComponent(id));
   setTitle(d.title);
   const selfHref = `#/watch/${encodeURIComponent(id)}`;
-  remember({ key: 'v:' + id, title: d.title, href: selfHref, sub: 'Video · ' + fmtDur(d.duration) });
+  remember({ key: 'v:' + id, title: d.title, href: selfHref, sub: tr('Video · {length}', { length: fmtDur(d.duration) }) });
   const p = vprog()[id];
   const resumeAt = !t && p && p.t > 15 && (!d.duration || p.t < d.duration - 20) ? p.t : 0;
   main.innerHTML = `<div class="rtop">${backButton(from, 'Videos')}</div>
   <div class="watch">
     <div>
       <div class="player"><video id="vid" controls preload="metadata" playsinline src="${fileUrl(d.path)}${t ? '#t=' + t : ''}"></video></div>
-      ${d.remote ? `<p class="small muted" style="margin:6px 0 0">Stored on the remote drive “${esc(d.remote)}”. It plays only while that computer is reachable.</p>` : ''}
+      ${d.remote ? `<p class="small muted" style="margin:6px 0 0">${tr('Stored on the remote drive “{name}”. It plays only while that computer is reachable.', { name: esc(d.remote) })}</p>` : ''}
       <h1 class="vtitle">${esc(d.title)}</h1>
       <div class="vmeta"><b>${esc(d.publisher || '')}</b><span>${fmtDur(d.duration)}</span>${d.upload_date ? `<span>${esc(d.upload_date.replace(/(\d{4})(\d\d)(\d\d)/, '$1-$2-$3'))}</span>` : ''}<span>${esc(d.trust)}</span></div>
-      ${resumeAt ? `<div class="resume" id="resume">You stopped at ${clock(resumeAt)}. <button class="btn" id="resYes">Resume</button><button class="btn plain" id="resNo">Start over</button></div>` : ''}
-      <div class="vactions dock">${saveButton({ key: 'v:' + id, title: d.title, href: selfHref, sub: 'Video · ' + fmtDur(d.duration) })}<a class="btn plain" title="Ask about this video" href="#/ask?about=${encodeURIComponent('video:' + id)}&${fromQ()}" id="askv">${ico('ask')}<span>Ask about this video</span></a></div>
-      <div class="notice small">A video shows how one person did something. Watching isn’t practice, and it may not match current safety guidance — check a manual for anything risky.</div>
+      ${resumeAt ? `<div class="resume" id="resume">${tr('You stopped at {time}.', { time: clock(resumeAt) })} <button class="btn" id="resYes">${tr('Resume')}</button><button class="btn plain" id="resNo">${tr('Start over')}</button></div>` : ''}
+      <div class="vactions dock">${saveButton({ key: 'v:' + id, title: d.title, href: selfHref, sub: tr('Video · {length}', { length: fmtDur(d.duration) }) })}<a class="btn plain" title="${tr('Ask about this video')}" href="#/ask?about=${encodeURIComponent('video:' + id)}&${fromQ()}" id="askv">${ico('ask')}<span>${tr('Ask about this video')}</span></a></div>
+      <div class="notice small">${tr('A video shows how one person did something. Watching isn’t practice, and it may not match current safety guidance — check a manual for anything risky.')}</div>
     </div>
-    <section class="txpanel" id="tx" aria-label="Transcript"><header><h2>Transcript</h2><label class="sr" for="cueQ">Find in transcript</label><input id="cueQ" type="search" placeholder="Find words in the transcript"></header>
-      <div class="cues" id="cues"><p class="muted" style="padding:12px 14px">Loading transcript…</p></div><div class="txnote" id="txnote"></div></section>
+    <section class="txpanel" id="tx" aria-label="${tr('Transcript')}"><header><h2>${tr('Transcript')}</h2><label class="sr" for="cueQ">${tr('Find in transcript')}</label><input id="cueQ" type="search" placeholder="${tr('Find words in the transcript')}"></header>
+      <div class="cues" id="cues"><p class="muted" style="padding:12px 14px">${tr('Loading transcript…')}</p></div><div class="txnote" id="txnote"></div></section>
   </div>
   <div id="morev"></div>
-  <details class="about-src"><summary>About this video</summary><div class="in"><dl><dt>Channel</dt><dd>${esc(d.publisher || '—')}</dd><dt>Kind</dt><dd>${esc(d.trust)}</dd><dt>Length</dt><dd>${fmtDur(d.duration) || 'unknown'}</dd>${d.notes ? `<dt>Note</dt><dd>${esc(d.notes)}</dd>` : ''}${d.source_url ? `<dt>Online original</dt><dd>${esc(hostOf(d.source_url))} <span class="muted">(online; not needed here)</span></dd>` : ''}</dl></div></details>`;
+  <details class="about-src"><summary>${tr('About this video')}</summary><div class="in"><dl><dt>${tr('Channel')}</dt><dd>${esc(d.publisher || '—')}</dd><dt>${tr('Kind')}</dt><dd>${esc(d.trust)}</dd><dt>${tr('Length')}</dt><dd>${fmtDur(d.duration) || tr('unknown')}</dd>${d.notes ? `<dt>${tr('Note')}</dt><dd>${esc(d.notes)}</dd>` : ''}${d.source_url ? `<dt>${tr('Online original')}</dt><dd>${esc(hostOf(d.source_url))} <span class="muted">${tr('(online; not needed here)')}</span></dd>` : ''}</dl></div></details>`;
   const vid = $('#vid');
   if (d.thumb) vid.poster = fileUrl(d.thumb);
-  vid.addEventListener('error', () => vid.closest('.player').insertAdjacentHTML('afterend', `<div class="err">${d.remote ? `This video is on the remote drive “${esc(d.remote)}”, which isn’t reachable right now. The transcript below still works.` : `This video file couldn’t be played here. <a href="${fileUrl(d.path)}" target="_blank" rel="noopener">Open the file directly</a>.`}</div>`), { once: true });
+  vid.addEventListener('error', () => vid.closest('.player').insertAdjacentHTML('afterend', `<div class="err">${d.remote ? tr('This video is on the remote drive “{name}”, which isn’t reachable right now. The transcript below still works.', { name: esc(d.remote) }) : tr('This video file couldn’t be played here. <a href="{href}" target="_blank" rel="noopener">Open the file directly</a>.', { href: fileUrl(d.path) })}</div>`), { once: true });
   if (resumeAt) {
     $('#resYes').onclick = () => { vid.currentTime = resumeAt; vid.play().catch(() => { }); $('#resume').remove() };
     $('#resNo').onclick = () => { vid.currentTime = 0; vid.play().catch(() => { }); $('#resume').remove() };
@@ -598,14 +599,14 @@ async function watch(id, t, from) {
   let cues = [];
   try {
     const tx = await api('/api/transcript/' + encodeURIComponent(id)); cues = tx.cues || [];
-    $('#txnote').textContent = cues.length ? `${tx.source === 'authored' ? 'Captions written by the publisher' : /auto/.test(tx.source || '') ? 'Automatic captions' : 'Captions'} — may contain errors.` : '';
+    $('#txnote').textContent = cues.length ? (tx.source === 'authored' ? tr('Captions written by the publisher — may contain errors.') : /auto/.test(tx.source || '') ? tr('Automatic captions — may contain errors.') : tr('Captions — may contain errors.')) : '';
   } catch { }
   const box = $('#cues');
   const draw = q => {
     const rx = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig') : null;
     const list = cues.filter(c => !rx || c.text.match(rx));
     box.innerHTML = list.length ? list.map(c => `<button class="cue" data-t="${c.t ?? ''}"><time>${c.t != null ? clock(c.t) : ''}</time><span>${rx ? esc(c.text).replace(rx, m => `<mark>${m}</mark>`) : esc(c.text)}</span></button>`).join('')
-      : `<p class="muted" style="padding:12px 14px">${cues.length ? 'No matching words.' : 'No transcript was saved for this video, so search and the assistant can’t see what’s said in it.'}</p>`;
+      : `<p class="muted" style="padding:12px 14px">${cues.length ? tr('No matching words.') : tr('No transcript was saved for this video, so search and the assistant can’t see what’s said in it.')}</p>`;
   };
   draw('');
   $('#cueQ').addEventListener('input', e => draw(e.target.value.trim()));
@@ -618,7 +619,7 @@ async function watch(id, t, from) {
   });
   try {
     const rel = await api('/api/videos/related/' + encodeURIComponent(id));
-    if (rel.length && $('#morev')) { $('#morev').innerHTML = secHead('More like this') + rail(rel.map(v => vcard(v)).join('')); wireRails($('#morev')) }
+    if (rel.length && $('#morev')) { $('#morev').innerHTML = secHead(tr('More like this')) + rail(rel.map(v => vcard(v)).join('')); wireRails($('#morev')) }
   } catch { }
 }
 
@@ -634,59 +635,59 @@ async function reader(id, page, from, view) {
   view = isPdf ? view || 'page' : isWeb ? view || 'web' : 'text';
   const key = 'd:' + id + (isPdf ? ':' + page : '');
   const selfHref = `#/read/${encodeURIComponent(id)}?p=${page}`;
-  remember({ key: 'd:' + id, title: d.title, href: selfHref, sub: (isPdf ? 'Page ' + page + ' · ' : '') + (d.publisher || '') });
+  remember({ key: 'd:' + id, title: d.title, href: selfHref, sub: (isPdf ? tr('Page {n}', { n: page }) + ' · ' : '') + (d.publisher || '') });
   const go = (p, v = view) => `#/read/${encodeURIComponent(id)}?p=${p}&view=${v}${from ? '&from=' + encodeURIComponent(from) : ''}`;
-  const views = isPdf ? [['page', 'Page'], ['text', 'Text'], ['pdf', 'Whole PDF']] : isWeb ? [['web', 'Page'], ['text', 'Text only']] : [];
+  const views = isPdf ? [['page', tr('Page')], ['text', tr('Text')], ['pdf', tr('Whole PDF')]] : isWeb ? [['web', tr('Page')], ['text', tr('Text only')]] : [];
   main.innerHTML = `
     <div class="rtop">${backButton(from)}</div>
     <h1 class="rtitle">${esc(d.title)}</h1>
     <div class="rsrc"><b>${esc(d.publisher || '')}</b>${d.year ? ' · ' + esc(d.year) : ''} · ${esc(d.trust)}</div>
-    <div class="rmodes">${views.length ? `<div class="seg dock" role="group" aria-label="How to show it">${views.map(([v, l]) => `<button data-view="${v}" aria-pressed="${v === view}">${l}</button>`).join('')}</div>` : ''}<span class="vactions dock">${askLink('doc:' + id + ':' + (isPdf ? page : 1), 'Ask')}${saveButton({ key, title: d.title + (isPdf ? ' — page ' + page : ''), href: selfHref, sub: d.publisher || d.kindLabel })}<button class="tb-btn insp-btn" data-insp aria-label="Show or hide the source details" title="Details">${ico('insp')}</button></span></div>
+    <div class="rmodes">${views.length ? `<div class="seg dock" role="group" aria-label="${tr('How to show it')}">${views.map(([v, l]) => `<button data-view="${v}" aria-pressed="${v === view}">${l}</button>`).join('')}</div>` : ''}<span class="vactions dock">${askLink('doc:' + id + ':' + (isPdf ? page : 1), tr('Ask'))}${saveButton({ key, title: d.title + (isPdf ? ' — ' + tr('page {n}', { n: page }) : ''), href: selfHref, sub: d.publisher || d.kindLabel })}<button class="tb-btn insp-btn" data-insp aria-label="${tr('Show or hide the source details')}" title="${tr('Details')}">${ico('insp')}</button></span></div>
     <div id="docbody"></div>
-    ${d.imageOnly ? '<div class="notice">This is a scanned document without searchable text, so search and the assistant can’t read it. Use the Page view.</div>' : ''}
-    ${isPdf && view !== 'pdf' ? `<div class="rbar"><a class="btn plain nav" href="${go(page - 1)}" ${page <= 1 ? 'aria-disabled="true" style="opacity:.35;pointer-events:none"' : ''} aria-label="Previous page">${ico('back')}<span>Previous</span></a>
-      <span class="pnum"><label class="sr" for="pg">Page number</label>Page <input id="pg" inputmode="numeric" value="${page}"> of ${total}</span>
-      <a class="btn nav" href="${go(page + 1)}" ${page >= total ? 'aria-disabled="true" style="opacity:.35;pointer-events:none"' : ''} aria-label="Next page"><span>Next</span>${ico('right')}</a></div>` : ''}
-    <details class="about-src"><summary>About this source</summary><div class="in"><p class="insp-h">${esc(d.title)}</p>
-      <dl><dt>Publisher</dt><dd>${esc(d.publisher || '—')}</dd><dt>Kind</dt><dd>${esc(d.trust)} · ${esc(d.kindLabel)}</dd>
-      ${d.edition ? `<dt>Edition</dt><dd>${esc(d.edition)}</dd>` : ''}${d.year ? `<dt>Year</dt><dd>${esc(d.year)}</dd>` : ''}
-      <dt>Saved</dt><dd>${esc((d.retrieved_at || '').slice(0, 10) || 'unknown date')} · ${esc(d.collection)}</dd>
-      ${d.notes ? `<dt>Note</dt><dd>${esc(d.notes)}</dd>` : ''}
-      ${d.source_url ? `<dt>Online original</dt><dd>${esc(hostOf(d.source_url))} <span class="muted">(online; not needed to read this copy)</span></dd>` : ''}</dl>
-      <p class="small muted">A reference copy, not advice checked for your situation. Check the date; older material can conflict with current guidance.</p>
-      ${isPdf || isWeb || !IN_WINDOW ? `<p><a class="btn ghost" href="${fileUrl(d.path)}${isPdf ? '#page=' + page : ''}" target="_blank" rel="noopener">${ico('ext')}Open the original file</a></p>` : ''}</div></details>`;
+    ${d.imageOnly ? `<div class="notice">${tr('This is a scanned document without searchable text, so search and the assistant can’t read it. Use the Page view.')}</div>` : ''}
+    ${isPdf && view !== 'pdf' ? `<div class="rbar"><a class="btn plain nav" href="${go(page - 1)}" ${page <= 1 ? 'aria-disabled="true" style="opacity:.35;pointer-events:none"' : ''} aria-label="${tr('Previous page')}">${ico('back')}<span>${tr('Previous')}</span></a>
+      <span class="pnum"><label class="sr" for="pg">${tr('Page number')}</label>${tr('Page')} <input id="pg" inputmode="numeric" value="${page}"> ${tr('of {total}', { total })}</span>
+      <a class="btn nav" href="${go(page + 1)}" ${page >= total ? 'aria-disabled="true" style="opacity:.35;pointer-events:none"' : ''} aria-label="${tr('Next page')}"><span>${tr('Next')}</span>${ico('right')}</a></div>` : ''}
+    <details class="about-src"><summary>${tr('About this source')}</summary><div class="in"><p class="insp-h">${esc(d.title)}</p>
+      <dl><dt>${tr('Publisher')}</dt><dd>${esc(d.publisher || '—')}</dd><dt>${tr('Kind')}</dt><dd>${esc(d.trust)} · ${esc(d.kindLabel)}</dd>
+      ${d.edition ? `<dt>${tr('Edition')}</dt><dd>${esc(d.edition)}</dd>` : ''}${d.year ? `<dt>${tr('Year')}</dt><dd>${esc(d.year)}</dd>` : ''}
+      <dt>${tr('Saved')}</dt><dd>${esc((d.retrieved_at || '').slice(0, 10) || tr('unknown date'))} · ${esc(d.collection)}</dd>
+      ${d.notes ? `<dt>${tr('Note')}</dt><dd>${esc(d.notes)}</dd>` : ''}
+      ${d.source_url ? `<dt>${tr('Online original')}</dt><dd>${esc(hostOf(d.source_url))} <span class="muted">${tr('(online; not needed to read this copy)')}</span></dd>` : ''}</dl>
+      <p class="small muted">${tr('A reference copy, not advice checked for your situation. Check the date; older material can conflict with current guidance.')}</p>
+      ${isPdf || isWeb || !IN_WINDOW ? `<p><a class="btn ghost" href="${fileUrl(d.path)}${isPdf ? '#page=' + page : ''}" target="_blank" rel="noopener">${ico('ext')}${tr('Open the original file')}</a></p>` : ''}</div></details>`;
   $$('[data-view]', main).forEach(b => b.addEventListener('click', () => swap(go(page, b.dataset.view))));
   if (innerWidth >= 1060 && !html.classList.contains('insp-off')) $('.about-src', main).open = true;
   const pg = $('#pg'); if (pg) pg.addEventListener('change', () => { const n = parseInt(pg.value, 10); if (n >= 1 && n <= total) location.hash = go(n) });
   const body = $('#docbody');
   if (view === 'page') {
     const w = Math.min(1600, Math.round(Math.min(innerWidth, 1000) * Math.min(2, devicePixelRatio || 1)));
-    body.innerHTML = `<div class="pagewrap"><img class="pageimg" alt="Page ${page} of ${esc(d.title)}" src="${pageImg(id, page, w)}"></div>`;
+    body.innerHTML = `<div class="pagewrap"><img class="pageimg" alt="${tr('Page {page} of {title}', { page, title: esc(d.title) })}" src="${pageImg(id, page, w)}"></div>`;
     const img = $('img', body);
-    img.addEventListener('error', () => { body.innerHTML = `<div class="notice">This page image couldn’t be made. <a href="${go(page, 'text')}">Show the text instead</a>.</div>` });
+    img.addEventListener('error', () => { body.innerHTML = `<div class="notice">${tr('This page image couldn’t be made. <a href="{href}">Show the text instead</a>.', { href: go(page, 'text') })}</div>` });
     if (page < total) { const n = new Image(); n.src = pageImg(id, page + 1, w) }
     let sx = null, sy = 0;
     const wrap = $('.pagewrap', body);
     wrap.addEventListener('touchstart', e => { if (e.touches.length === 1) { sx = e.touches[0].clientX; sy = e.touches[0].clientY } }, { passive: true });
     wrap.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy; sx = null; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0 && page < total) location.hash = go(page + 1); if (dx > 0 && page > 1) location.hash = go(page - 1) } }, { passive: true });
   } else if (view === 'pdf') {
-    body.innerHTML = `<iframe class="frame" title="${esc(d.title)}" src="${fileUrl(d.path)}#page=${page}"></iframe><p class="small muted">If the PDF doesn’t show here (some phones can’t), use Page view or open the original file.</p>`;
+    body.innerHTML = `<iframe class="frame" title="${esc(d.title)}" src="${fileUrl(d.path)}#page=${page}"></iframe><p class="small muted">${tr('If the PDF doesn’t show here (some phones can’t), use Page view or open the original file.')}</p>`;
   } else if (view === 'web') {
     const own = /(^|\/)documents\/lastbook\//.test(d.path);   // Lastbook's own pages (Sources and permissions) take the window's look from the server (engine/saved_pages.py, OWN_LOOK); an older server's stays a white sheet
     body.innerHTML = `<iframe class="frame${own ? ' own' : ''}" title="${esc(d.title)}" src="${fileUrl(d.path)}"></iframe>`;
   } else {
-    body.innerHTML = '<p class="loading">Loading text…</p>';
+    body.innerHTML = `<p class="loading">${tr('Loading text…')}</p>`;
     try {
       const t = await api(`/api/page/${encodeURIComponent(id)}/${isPdf ? page : 1}`);
       const txt = (t.text || '').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-      body.innerHTML = `${isPdf || isWeb ? '<div class="notice small">Text pulled out of the original automatically — tables, diagrams and warning boxes can be lost or out of order. Check the Page view for anything important.</div>' : ''}<div class="pagetext">${esc(txt) || '<span class="muted">No text on this page (it may be a picture or blank).</span>'}</div>`;
-    } catch (e) { body.innerHTML = errorBox(e, 'Couldn’t load the text.') }
+      body.innerHTML = `${isPdf || isWeb ? `<div class="notice small">${tr('Text pulled out of the original automatically — tables, diagrams and warning boxes can be lost or out of order. Check the Page view for anything important.')}</div>` : ''}<div class="pagetext">${esc(txt) || `<span class="muted">${tr('No text on this page (it may be a picture or blank).')}</span>`}</div>`;
+    } catch (e) { body.innerHTML = errorBox(e, tr('Couldn’t load the text.')) }
   }
   main.onkeydown = e => { if (!isPdf || /INPUT/.test(e.target.tagName) || e.altKey || e.metaKey || e.ctrlKey) return; if (e.key === 'ArrowRight' && page < total) location.hash = go(page + 1); if (e.key === 'ArrowLeft' && page > 1) location.hash = go(page - 1) };
 }
 
 /* --------------------------------------------------------------- wiki -- */
-const ZIMNAMES = { mdwiki: 'Medical encyclopedia (MDWiki)', wikipedia: 'Wikipedia (text only)', wikibooks: 'Wikibooks — how-to textbooks', appropedia: 'Appropedia — appropriate technology' };
+const ZIMNAMES = { mdwiki: tr('Medical encyclopedia (MDWiki)'), wikipedia: tr('Wikipedia (text only)'), wikibooks: tr('Wikibooks — how-to textbooks'), appropedia: tr('Appropedia — appropriate technology') };
 const zimLabel = name => { for (const k in ZIMNAMES) if (name.startsWith(k)) return ZIMNAMES[k]; return name };
 async function wiki(path, from, y) {
   const [zim, ...rest] = path.split('/');
@@ -697,7 +698,7 @@ async function wiki(path, from, y) {
   const selfHref = '#/wiki/' + path;
   const mainPage = zimMain(zim);
   main.innerHTML = `<div class="rtop">${backButton(from || '#/encyclopedias')}<span id="wsave" class="dock">${saveButton({ key: 'w:' + path, title, href: selfHref, sub: zimLabel(zim) })}</span></div>
-    <h1 class="rtitle" id="wtitle">${esc(title)}</h1><div class="rsrc"><span class="zn">${esc(zimLabel(zim))} · </span>Community-written; check safety-critical steps against a manual${IN_WINDOW ? '' : ` · <a id="wopen" href="${src}" target="_blank" rel="noopener">open on its own</a>`}</div>
+    <h1 class="rtitle" id="wtitle">${esc(title)}</h1><div class="rsrc"><span class="zn">${esc(zimLabel(zim))} · </span>${tr('Community-written; check safety-critical steps against a manual')}${IN_WINDOW ? '' : ` · <a id="wopen" href="${src}" target="_blank" rel="noopener">${tr('open on its own')}</a>`}</div>
     <iframe class="frame" id="wframe" title="${esc(title)}" src="${src}"></iframe>`;
   const f = $('#wframe');
   // The toolbar names the encyclopedia, and the article once the article's own title has scrolled up out of the frame, as a large title does
@@ -743,7 +744,7 @@ async function wiki(path, from, y) {
       if (f.contentDocument !== fd) return;
       if (front && own) own.style.setProperty('display', 'none', 'important');   // the skin sets its own display, which the hidden attribute does not beat
       main.classList.toggle('own-title', front);   // then the app's heading names it
-      const nt = front ? zimLabel(zim) : raw || p.split('/').pop().replace(/_/g, ' '), sub = front ? 'Encyclopedia' : zimLabel(zim);
+      const nt = front ? zimLabel(zim) : raw || p.split('/').pop().replace(/_/g, ' '), sub = front ? tr('Encyclopedia') : zimLabel(zim);
       $('#wtitle').textContent = nt; if ($('#wopen')) $('#wopen').href = loc; setTitle(nt, '', zimLabel(zim));
       f.lbName = !front && own ? { nt, at: own.getBoundingClientRect().bottom + fw.scrollY } : null; barName();
       $('#wsave').innerHTML = saveButton({ key: 'w:' + p, title: nt, href: '#/wiki/' + p, sub });
@@ -845,32 +846,33 @@ function lookOf(fd) {
   r.setProperty('--lb-link', getComputedStyle(probe).color); probe.remove();
   for (const [k, v] of [['--lb-ink', '--ink'], ['--lb-ink2', '--ink2'], ['--lb-line', '--line2'], ['--lb-font', '--font'], ['--lb-display', '--display']]) { const x = cs.getPropertyValue(v).trim(); if (x) r.setProperty(k, x) }
 }
-const ZIMS = [['mdwiki_en_all_maxi_2025-11.zim', 'Medical encyclopedia', 'MDWiki: plain-language articles on conditions, medicines and first aid.', 'health'],
-['wikibooks_en_all_maxi_2026-04.zim', 'Wikibooks', 'Open textbooks and how-to manuals, from cooking to electronics.', 'book'],
-['appropedia_en_all_maxi_2026-02.zim', 'Appropedia', 'Appropriate technology: water, sanitation, energy and building projects.', 'repair'],
-['wikipedia_en_all_nopic_2026-06.zim', 'Wikipedia', 'The full English encyclopedia, text only (no pictures).', 'wiki']];
+const ZIMS = [['mdwiki_en_all_maxi_2025-11.zim', tr('Medical encyclopedia'), tr('MDWiki: plain-language articles on conditions, medicines and first aid.'), 'health'],
+['wikibooks_en_all_maxi_2026-04.zim', 'Wikibooks', tr('Open textbooks and how-to manuals, from cooking to electronics.'), 'book'],
+['appropedia_en_all_maxi_2026-02.zim', 'Appropedia', tr('Appropriate technology: water, sanitation, energy and building projects.'), 'repair'],
+['wikipedia_en_all_nopic_2026-06.zim', 'Wikipedia', tr('The full English encyclopedia, text only (no pictures).'), 'wiki']];
 const zimsHere = async () => { const here = (await libInfo()).zims; return here ? ZIMS.filter(z => here.includes(z[0])) : ZIMS };
 async function encyclopedias(q) {
-  setTitle('Encyclopedias');
+  setTitle(tr('Encyclopedias'));
   const zims = await zimsHere();
-  if (!zims.length) { main.innerHTML = `<h1>Encyclopedias</h1><p class="lead">This download has no encyclopedias.</p>`; return }
-  main.innerHTML = `<h1>Encyclopedias</h1><p class="lead">${['', 'One complete encyclopedia', 'Two complete encyclopedias', 'Three complete encyclopedias', 'Four complete encyclopedias'][zims.length]}. Community-written: good for background — use the guides’ manuals for safety-critical steps.</p>
-  <div style="margin:16px 0">${searchBox('zq', q, 'e.g. tetanus, solar panel, sourdough')}</div><div id="zres"></div>
-  ${secHead('Open one')}<div class="cards2">${zims.map(z => `<a class="card" href="#/wiki/${z[0]}/?from=${encodeURIComponent('#/encyclopedias')}"><span class="ico">${ico(z[3])}</span><b>${esc(z[1])}</b><small>${esc(z[2])}</small></a>`).join('')}</div>`;
+  if (!zims.length) { main.innerHTML = `<h1>${tr('Encyclopedias')}</h1><p class="lead">${tr('This download has no encyclopedias.')}</p>`; return }
+  const count = ['', tr('One complete encyclopedia'), tr('Two complete encyclopedias'), tr('Three complete encyclopedias'), tr('Four complete encyclopedias')][zims.length];
+  main.innerHTML = `<h1>${tr('Encyclopedias')}</h1><p class="lead">${tr('{count}. Community-written: good for background — use the guides’ manuals for safety-critical steps.', { count })}</p>
+  <div style="margin:16px 0">${searchBox('zq', q, tr('e.g. tetanus, solar panel, sourdough'))}</div><div id="zres"></div>
+  ${secHead(tr('Open one'))}<div class="cards2">${zims.map(z => `<a class="card" href="#/wiki/${z[0]}/?from=${encodeURIComponent('#/encyclopedias')}"><span class="ico">${ico(z[3])}</span><b>${esc(z[1])}</b><small>${esc(z[2])}</small></a>`).join('')}</div>`;
   $('#zqF').addEventListener('submit', e => { e.preventDefault(); location.hash = '#/encyclopedias?q=' + encodeURIComponent($('#zq').value.trim()) });
   if (q) zimResults(q, $('#zres'), 40);
 }
 // heading: part of a wider search, shown under that heading only when something matched. Answers whether anything did.
 async function zimResults(q, el, max = 8, heading = '') {
-  el.innerHTML = heading ? '' : '<p class="loading">Searching the encyclopedias…</p>';
+  el.innerHTML = heading ? '' : `<p class="loading">${tr('Searching the encyclopedias…')}</p>`;
   try {
     const hits = await api('/api/collection-search?q=' + encodeURIComponent(q));
-    if (!hits.length) { el.innerHTML = heading ? '' : `<div class="empty"><span class="e-ico">${ico('wiki')}</span><b>No articles found</b><p>Try another word for the same thing.</p></div>`; return false }
+    if (!hits.length) { el.innerHTML = heading ? '' : `<div class="empty"><span class="e-ico">${ico('wiki')}</span><b>${tr('No articles found')}</b><p>${tr('Try another word for the same thing.')}</p></div>`; return false }
     const ord = ['mdwiki', 'wikibooks', 'appropedia', 'wikipedia'];
     hits.sort((a, b) => ord.findIndex(k => a.collection.startsWith(k)) - ord.findIndex(k => b.collection.startsWith(k)));
     el.innerHTML = `${heading ? `<h2>${heading}</h2>` : ''}<ul class="list">${hits.slice(0, max).map(h => `<li><a class="row" href="#/wiki/${esc(h.path.replace(/^zim\//, ''))}?${fromQ()}"><span class="k">${ico('wiki')}</span><span><b>${esc(h.title)}</b><small>${esc(zimLabel(h.collection))}</small></span></a></li>`).join('')}</ul>`;
     return true;
-  } catch (e) { el.innerHTML = heading ? '' : `<p class="muted">Encyclopedia search isn’t available right now (${esc(e.message)}).</p>`; return false }
+  } catch (e) { el.innerHTML = heading ? '' : `<p class="muted">${tr('Encyclopedia search isn’t available right now ({reason}).', { reason: esc(e.message) })}</p>`; return false }
 }
 
 /* ------------------------------------------------------------- search -- */
@@ -881,11 +883,11 @@ function topicMatches(q) {
 }
 let searchSeq = 0;
 async function searchPage(q, kind) {
-  setTitle(q ? 'Search: ' + q : 'Search');
-  const kinds = [['all', 'Everything'], ['read', 'Manuals & pages'], ['video', 'Videos'], ['wiki', 'Encyclopedias']];
-  main.innerHTML = `<h1>${q ? 'Results' : 'Search'}</h1>
-  ${searchBox('searchQ', q, 'Describe it in everyday words')}
-  <div class="chips" role="group" aria-label="Show" style="margin-top:12px" id="kinds">${kinds.map(([k, l]) => `<a class="chip ${k === kind ? 'on' : ''}" aria-pressed="${k === kind}" data-kind="${k}" href="#/search?q=${encodeURIComponent(q)}&kind=${k}">${l}</a>`).join('')}</div>
+  setTitle(q ? tr('Search: {q}', { q }) : tr('Search'));
+  const kinds = [['all', tr('Everything')], ['read', tr('Manuals & pages')], ['video', tr('Videos')], ['wiki', tr('Encyclopedias')]];
+  main.innerHTML = `<h1>${q ? tr('Results') : tr('Search')}</h1>
+  ${searchBox('searchQ', q, tr('Describe it in everyday words'))}
+  <div class="chips" role="group" aria-label="${tr('Show')}" style="margin-top:12px" id="kinds">${kinds.map(([k, l]) => `<a class="chip ${k === kind ? 'on' : ''}" aria-pressed="${k === kind}" data-kind="${k}" href="#/search?q=${encodeURIComponent(q)}&kind=${k}">${l}</a>`).join('')}</div>
   <div id="sask"></div><div id="sout"></div>`;
   const input = $('#searchQ');
   $('#searchQF').addEventListener('submit', e => { e.preventDefault(); input.blur(); go(input.value.trim(), true) });
@@ -908,38 +910,38 @@ async function searchPage(q, kind) {
 }
 function askOffer(q) {
   const el = $('#sask'); if (!el) return;
-  el.innerHTML = q && q.split(/\s+/).length >= 2 ? `<a class="ghit" href="#/ask?q=${encodeURIComponent(q)}" style="--tc:var(--accent)"><span class="ico">${ico('ask')}</span><span><b>Ask the library: “${esc(q)}”</b><small>Get a written answer with the exact pages it came from</small></span></a>` : '';
+  el.innerHTML = q && q.split(/\s+/).length >= 2 ? `<a class="ghit" href="#/ask?q=${encodeURIComponent(q)}" style="--tc:var(--accent)"><span class="ico">${ico('ask')}</span><span><b>${tr('Ask the library: “{q}”', { q: esc(q) })}</b><small>${tr('Get a written answer with the exact pages it came from')}</small></span></a>` : '';
 }
 async function results(q, kind) {
   const seq = ++searchSeq, out = $('#sout');
   if (!q) {
-    out.innerHTML = `<p class="muted" style="margin-top:18px">Use the words you’d use with a friend. For example:</p><div class="chips wrapchips">${['clean drinking water', 'broken leg', 'carbon monoxide', 'keep food cold', 'ham radio license', 'plant potatoes', 'sharpen a knife', 'diarrhea in a child'].map(x => `<a class="chip" href="#/search?q=${encodeURIComponent(x)}">${esc(x)}</a>`).join('')}</div>`;
+    out.innerHTML = `<p class="muted" style="margin-top:18px">${tr('Use the words you’d use with a friend. For example:')}</p><div class="chips wrapchips">${['clean drinking water', 'broken leg', 'carbon monoxide', 'keep food cold', 'ham radio license', 'plant potatoes', 'sharpen a knife', 'diarrhea in a child'].map(x => `<a class="chip" href="#/search?q=${encodeURIComponent(x)}">${esc(x)}</a>`).join('')}</div>`;
     return;
   }
   const g = kind === 'all' ? topicMatches(q) : [];
-  out.innerHTML = `${g.length ? `<h2>Start with a guide</h2>${g.map(({ t, c }) => `<a class="ghit" href="#/t/${t.id}${c ? '/' + c.id : ''}" ${tcStyle(t.id)}><span class="ico">${ico(t.id)}</span><span><b>${esc(SHORT[t.id] || t.title)}${c ? ' — ' + esc(c.label) : ''}</b><small>Picked pages with exact page numbers and safety limits</small></span></a>`).join('')}` : ''}
+  out.innerHTML = `${g.length ? `<h2>${tr('Start with a guide')}</h2>${g.map(({ t, c }) => `<a class="ghit" href="#/t/${t.id}${c ? '/' + c.id : ''}" ${tcStyle(t.id)}><span class="ico">${ico(t.id)}</span><span><b>${esc(SHORT[t.id] || t.title)}${c ? ' — ' + esc(c.label) : ''}</b><small>${tr('Picked pages with exact page numbers and safety limits')}</small></span></a>`).join('')}` : ''}
     <div id="spass"></div><div id="svid"></div><div id="sres"></div><div id="szim"></div>`;
   if (kind === 'wiki') return zimResults(q, $('#szim'), 40);
   // Each part answers whether it found anything; "nothing matched" shows once, only when none did.
   const parts = kind === 'all' || kind === 'read' ? [passages(q, seq)] : [];
   const reqs = [api('/api/find?q=' + encodeURIComponent(q) + '&kind=' + (kind === 'video' ? 'video' : 'read'))];
   if (kind === 'all') reqs.push(api('/api/find?q=' + encodeURIComponent(q) + '&kind=video').catch(() => null));
-  $('#sres').innerHTML = '<p class="loading">Searching…</p>';
+  $('#sres').innerHTML = `<p class="loading">${tr('Searching…')}</p>`;
   const found = (async () => {
     try {
       const [d, vd] = await Promise.all(reqs);
       if (seq !== searchSeq) return true;
       const vids = (kind === 'video' ? d : vd)?.results || [];
       if (kind === 'video') { $('#sres').innerHTML = vids.length ? `<div class="vgrid" style="margin-top:14px">${vids.map(r => vcard(r)).join('')}</div>` : ''; return vids.length > 0 }
-      if (vids.length) { $('#svid').innerHTML = secHead('Videos', '', `<a href="#/search?q=${encodeURIComponent(q)}&kind=video">See all</a>`) + rail(vids.slice(0, 10).map(r => vcard(r)).join('')); wireRails($('#svid')) }
-      $('#sres').innerHTML = d.results.length ? `<h2>In the manuals and saved pages</h2>
-        ${d.expanded.length ? `<p class="small muted">Also looked for: ${d.expanded.slice(0, 10).map(esc).join(', ')}${d.mode === 'some words' ? ' · showing pages with some of your words' : ''}</p>` : ''}
+      if (vids.length) { $('#svid').innerHTML = secHead(tr('Videos'), '', `<a href="#/search?q=${encodeURIComponent(q)}&kind=video">${tr('See all')}</a>`) + rail(vids.slice(0, 10).map(r => vcard(r)).join('')); wireRails($('#svid')) }
+      $('#sres').innerHTML = d.results.length ? `<h2>${tr('In the manuals and saved pages')}</h2>
+        ${d.expanded.length ? `<p class="small muted">${tr('Also looked for: {words}', { words: d.expanded.slice(0, 10).map(esc).join(', ') })}${d.mode === 'some words' ? ' · ' + tr('showing pages with some of your words') : ''}</p>` : ''}
         <div class="results">${d.results.map(resultCard).join('')}</div>` : '';
       return d.results.length + vids.length > 0;
-    } catch (e) { if (seq === searchSeq) $('#sres').innerHTML = errorBox(e, 'Search isn’t responding.') + '<p class="small muted">The library may be busy rebuilding its index. Try again in a minute.</p>'; return true }
+    } catch (e) { if (seq === searchSeq) $('#sres').innerHTML = errorBox(e, tr('Search isn’t responding.')) + `<p class="small muted">${tr('The library may be busy rebuilding its index. Try again in a minute.')}</p>`; return true }
   })();
   parts.push(found);
-  if (kind === 'all') parts.push(found.then(() => seq === searchSeq && zimResults(q, $('#szim'), 6, 'In the encyclopedias')));
+  if (kind === 'all') parts.push(found.then(() => seq === searchSeq && zimResults(q, $('#szim'), 6, tr('In the encyclopedias'))));
   const any = (await Promise.all(parts)).some(Boolean);
   if (seq === searchSeq && !g.length && !any) $('#sres').innerHTML = emptySearch(q);
 }
@@ -948,74 +950,74 @@ async function passages(q, seq) {
   try {
     const d = await api('/api/retrieve?q=' + encodeURIComponent(q) + '&k=6&kind=manual');
     if (seq !== searchSeq || !d.results.length || !$('#spass')) return false;
-    $('#spass').innerHTML = secHead('Most relevant pages', d.semantic && !d.semantic.chunks ? 'Matched by your words' : 'Matched by meaning as well as by words') + `<div class="rcards">${d.results.map(r => rcard({ src: { id: r.doc_id, kind: r.kind, title: r.title, publisher: r.publisher, year: r.year, pages: r.pages, trust: r.trust }, page: r.page, label: r.title, note: (r.excerpt || '').slice(0, 220) + '…' })).join('')}</div>`;
+    $('#spass').innerHTML = secHead(tr('Most relevant pages'), d.semantic && !d.semantic.chunks ? tr('Matched by your words') : tr('Matched by meaning as well as by words')) + `<div class="rcards">${d.results.map(r => rcard({ src: { id: r.doc_id, kind: r.kind, title: r.title, publisher: r.publisher, year: r.year, pages: r.pages, trust: r.trust }, page: r.page, label: r.title, note: (r.excerpt || '').slice(0, 220) + '…' })).join('')}</div>`;
     return true;
   } catch { return false }
 }
-const emptySearch = q => `<div class="empty"><span class="e-ico">${ico('search')}</span><b>No results for “${esc(q)}”</b><p>Try fewer words, or another word for the same thing.</p></div>`;
+const emptySearch = q => `<div class="empty"><span class="e-ico">${ico('search')}</span><b>${tr('No results for “{q}”', { q: esc(q) })}</b><p>${tr('Try fewer words, or another word for the same thing.')}</p></div>`;
 function resultCard(r) {
   const base = { src: r };
   return `<article class="result"><h3><a href="${hrefFor({ ...base, page: r.hits[0] && r.hits[0].page })}">${esc(r.title)}</a></h3>
     <div class="rsrc">${srcText(r)} · ${esc(r.trust)}</div>
-    ${r.hits.slice(0, 2).map(h => `<a class="hit" href="${hrefFor({ ...base, page: h.page })}">${h.page ? `<b>Page ${h.page}:</b> ` : ''}${h.snippet}</a>`).join('')}</article>`;
+    ${r.hits.slice(0, 2).map(h => `<a class="hit" href="${hrefFor({ ...base, page: h.page })}">${h.page ? `<b>${tr('Page {n}:', { n: h.page })}</b> ` : ''}${h.snippet}</a>`).join('')}</article>`;
 }
 
 /* ------------------------------------------------------------ library -- */
 async function library() {
-  setTitle('Library');
+  setTitle(tr('Library'));
   const saved = store.get('saved', []).length, chats = (window.Chat ? Chat.count() : 0);
   const zims = await zimsHere();
-  main.innerHTML = `<h1>Library</h1><p class="lead">Your saved things, learning routes, encyclopedias and every manual in the collection.</p>
+  main.innerHTML = `<h1>${tr('Library')}</h1><p class="lead">${tr('Your saved things, learning routes, encyclopedias and every manual in the collection.')}</p>
   <div class="cards2 three" style="margin-top:16px">
-    <a class="card" href="#/saved"><span class="ico">${ico('save')}</span><b>Saved</b><small>${saved ? saved + ' saved item' + (saved > 1 ? 's' : '') : 'Pages, videos and answers you keep'} on this device</small></a>
-    <a class="card" href="#/ask"><span class="ico">${ico('ask')}</span><b>Chats</b><small>${chats ? chats + ' saved conversation' + (chats > 1 ? 's' : '') : 'Ask the library a question'}</small></a>
-    <a class="card" href="#/prepare"><span class="ico">${ico('prep')}</span><b>Prepare your household</b><small>Getting-ready readings from every guide</small></a>
+    <a class="card" href="#/saved"><span class="ico">${ico('save')}</span><b>${tr('Saved')}</b><small>${saved === 1 ? tr('1 saved item on this device') : saved ? tr('{n} saved items on this device', { n: saved }) : tr('Pages, videos and answers you keep on this device')}</small></a>
+    <a class="card" href="#/ask"><span class="ico">${ico('ask')}</span><b>${tr('Chats')}</b><small>${chats === 1 ? tr('1 saved conversation') : chats ? tr('{n} saved conversations', { n: chats }) : tr('Ask the library a question')}</small></a>
+    <a class="card" href="#/prepare"><span class="ico">${ico('prep')}</span><b>${tr('Prepare your household')}</b><small>${tr('Getting-ready readings from every guide')}</small></a>
   </div>
-  ${secHead('Learn a skill', 'Step-by-step routes that start simple')}
-  <div class="needs">${learnTopics().map(t => `<a class="need" href="#/t/${t.id}" ${tcStyle(t.id)}><span class="ico">${ico(t.id)}</span><b>${esc(SHORT[t.id] || t.title)}</b><small>${esc(t.short || '')} · ${(t.route || []).length} steps</small></a>`).join('')}</div>
-  ${zims.length ? secHead('Encyclopedias', 'Complete offline copies', '<a href="#/encyclopedias">Search them</a>') + `<div class="cards2">${zims.map(z => `<a class="card" href="#/wiki/${z[0]}/?from=${encodeURIComponent('#/library')}"><span class="ico">${ico(z[3])}</span><b>${esc(z[1])}</b><small>${esc(z[2])}</small></a>`).join('')}</div>` : ''}
-  ${secHead('Browse by subject', 'Every manual, saved web page and video')}<div id="shelves"><p class="loading">Loading…</p></div>
-  <p style="margin-top:20px"><a href="#/about">About this library and its sources</a>${IN_WINDOW ? ' · <a href="/ui/setup.html#manage">Library and local AI</a>' : ''}</p>`;
+  ${secHead(tr('Learn a skill'), tr('Step-by-step routes that start simple'))}
+  <div class="needs">${learnTopics().map(t => `<a class="need" href="#/t/${t.id}" ${tcStyle(t.id)}><span class="ico">${ico(t.id)}</span><b>${esc(SHORT[t.id] || t.title)}</b><small>${esc(t.short || '')} · ${tr('{n} steps', { n: (t.route || []).length })}</small></a>`).join('')}</div>
+  ${zims.length ? secHead(tr('Encyclopedias'), tr('Complete offline copies'), `<a href="#/encyclopedias">${tr('Search them')}</a>`) + `<div class="cards2">${zims.map(z => `<a class="card" href="#/wiki/${z[0]}/?from=${encodeURIComponent('#/library')}"><span class="ico">${ico(z[3])}</span><b>${esc(z[1])}</b><small>${esc(z[2])}</small></a>`).join('')}</div>` : ''}
+  ${secHead(tr('Browse by subject'), tr('Every manual, saved web page and video'))}<div id="shelves"><p class="loading">${tr('Loading…')}</p></div>
+  <p style="margin-top:20px"><a href="#/about">${tr('About this library and its sources')}</a>${IN_WINDOW ? ` · <a href="/ui/setup.html#manage">${tr('Library and local AI')}</a>` : ''}</p>`;
   try {
     const sh = await api('/api/shelves');
-    $('#shelves').innerHTML = sh.filter(s => s.read + s.video).map(s => `<a class="shelfrow" href="#/shelf/${s.id}"><span><b>${esc(s.title)}</b><small>${s.read ? s.read.toLocaleString() + ' to read' : ''}${s.read && s.video ? ' · ' : ''}${s.video ? s.video.toLocaleString() + ' videos' : ''}</small></span>${ico('right')}</a>`).join('');
+    $('#shelves').innerHTML = sh.filter(s => s.read + s.video).map(s => `<a class="shelfrow" href="#/shelf/${s.id}"><span><b>${esc(s.title)}</b><small>${s.read ? tr('{n} to read', { n: s.read.toLocaleString() }) : ''}${s.read && s.video ? ' · ' : ''}${s.video ? (s.video === 1 ? tr('1 video') : tr('{n} videos', { n: s.video.toLocaleString() })) : ''}</small></span>${ico('right')}</a>`).join('');
   } catch (e) { $('#shelves').innerHTML = errorBox(e) }
 }
 async function prepareHub() {
-  setTitle('Prepare your household');
+  setTitle(tr('Prepare your household'));
   const list = nowTopics().filter(t => (t.prepare || []).length);
-  main.innerHTML = `<h1>Prepare your household</h1>
-  <p class="lead">Readings for getting ready before water, power or services stop — gathered from each guide. One area at a time.</p>
-  <div class="notice">A shopping list or cart isn’t the same as supplies you own, and reading isn’t the same as a practised plan.</div>
-  ${list.map(t => `<details class="more" ${tcStyle(t.id)}><summary><span class="prep-ico">${ico(t.id)}</span><span>${esc(SHORT[t.id] || t.title)} <span class="n">· ${t.prepare.length}</span></span></summary><div class="body"><ul class="list">${t.prepare.map(i => rowItem({ ...i, preview: true })).join('')}</ul><p><a href="#/t/${t.id}">Open the full guide</a></p></div></details>`).join('')}`;
+  main.innerHTML = `<h1>${tr('Prepare your household')}</h1>
+  <p class="lead">${tr('Readings for getting ready before water, power or services stop — gathered from each guide. One area at a time.')}</p>
+  <div class="notice">${tr('A shopping list or cart isn’t the same as supplies you own, and reading isn’t the same as a practised plan.')}</div>
+  ${list.map(t => `<details class="more" ${tcStyle(t.id)}><summary><span class="prep-ico">${ico(t.id)}</span><span>${esc(SHORT[t.id] || t.title)} <span class="n">· ${t.prepare.length}</span></span></summary><div class="body"><ul class="list">${t.prepare.map(i => rowItem({ ...i, preview: true })).join('')}</ul><p><a href="#/t/${t.id}">${tr('Open the full guide')}</a></p></div></details>`).join('')}`;
 }
 async function shelfPage(id, kind, q) {
   const sh = (await api('/api/shelves')).find(s => s.id === id);
   if (!sh) return notFound();
   setTitle(sh.title);
-  main.innerHTML = `${backButton('#/library', 'Library')}${crumbs([['Library', '#/library'], [sh.title]])}<h1>${esc(sh.title)}</h1>
-  <div style="margin:14px 0 10px">${searchBox('shq', q, 'Filter by title or publisher', 'Filter')}</div>
-  <div class="chips">${[['all', 'Everything'], ['read', 'To read'], ['video', 'Videos']].map(([k, l]) => `<a class="chip ${k === kind ? 'on' : ''}" href="#/shelf/${id}?kind=${k}&q=${encodeURIComponent(q)}">${l}</a>`).join('')}</div><div id="shres"><p class="loading">Loading…</p></div>`;
+  main.innerHTML = `${backButton('#/library', tr('Library'))}${crumbs([[tr('Library'), '#/library'], [sh.title]])}<h1>${esc(sh.title)}</h1>
+  <div style="margin:14px 0 10px">${searchBox('shq', q, tr('Filter by title or publisher'), tr('Filter'))}</div>
+  <div class="chips">${[['all', tr('Everything')], ['read', tr('To read')], ['video', tr('Videos')]].map(([k, l]) => `<a class="chip ${k === kind ? 'on' : ''}" href="#/shelf/${id}?kind=${k}&q=${encodeURIComponent(q)}">${l}</a>`).join('')}</div><div id="shres"><p class="loading">${tr('Loading…')}</p></div>`;
   $('#shqF').addEventListener('submit', e => { e.preventDefault(); location.hash = `#/shelf/${id}?kind=${kind}&q=` + encodeURIComponent($('#shq').value.trim()) });
   let off = 0;
   const load = async () => {
     const d = await api(`/api/shelf/${id}?kind=${kind}&q=${encodeURIComponent(q)}&offset=${off}`);
-    const html = d.collections.map(c => `<section class="collection"><h3>${esc(c.collection)}</h3><div class="small muted">${esc(c.trust)} · ${c.count} item${c.count > 1 ? 's' : ''}</div><ul class="list">${c.items.map(r => rowItem({ src: r })).join('')}</ul>${c.count > c.items.length ? `<a class="btn ghost" href="#/collection?name=${encodeURIComponent(c.collection)}&${fromQ()}">See all ${c.count}</a>` : ''}</section>`).join('');
-    if (!off) $('#shres').innerHTML = d.collections.length ? '' : '<div class="empty">Nothing here matches. Try another word.</div>';
+    const html = d.collections.map(c => `<section class="collection"><h3>${esc(c.collection)}</h3><div class="small muted">${esc(c.trust)} · ${c.count > 1 ? tr('{n} items', { n: c.count }) : tr('1 item')}</div><ul class="list">${c.items.map(r => rowItem({ src: r })).join('')}</ul>${c.count > c.items.length ? `<a class="btn ghost" href="#/collection?name=${encodeURIComponent(c.collection)}&${fromQ()}">${tr('See all {n}', { n: c.count })}</a>` : ''}</section>`).join('');
+    if (!off) $('#shres').innerHTML = d.collections.length ? '' : `<div class="empty">${tr('Nothing here matches. Try another word.')}</div>`;
     $('#shres').insertAdjacentHTML('beforeend', html);
     $('#moreb')?.remove();
-    if (d.more) { $('#shres').insertAdjacentHTML('beforeend', '<p><button class="btn plain" id="moreb">Show more</button></p>'); $('#moreb').onclick = () => { off += 40; load() } }
+    if (d.more) { $('#shres').insertAdjacentHTML('beforeend', `<p><button class="btn plain" id="moreb">${tr('Show more')}</button></p>`); $('#moreb').onclick = () => { off += 40; load() } }
   };
   await load();
 }
 async function collectionPage(name, from) {
   setTitle(name);
-  main.innerHTML = `<div>${backButton(from, 'Library')}</div><h1 style="margin-top:12px">${esc(name)}</h1><ul class="list collection" id="cl"></ul><div id="cm"></div>`;
+  main.innerHTML = `<div>${backButton(from, tr('Library'))}</div><h1 style="margin-top:12px">${esc(name)}</h1><ul class="list collection" id="cl"></ul><div id="cm"></div>`;
   let off = 0;
   const load = async () => {
     const d = await api('/api/collection?name=' + encodeURIComponent(name) + '&offset=' + off);
     $('#cl').insertAdjacentHTML('beforeend', d.items.map(r => rowItem({ src: r })).join(''));
-    $('#cm').innerHTML = d.more ? '<button class="btn plain" id="cmb">Show more</button>' : '';
+    $('#cm').innerHTML = d.more ? `<button class="btn plain" id="cmb">${tr('Show more')}</button>` : '';
     if (d.more) $('#cmb').onclick = () => { off += 60; load() };
   };
   await load();
@@ -1023,48 +1025,48 @@ async function collectionPage(name, from) {
 
 /* -------------------------------------------------------------- saved -- */
 async function savedPage() {
-  setTitle('Saved');
+  setTitle(tr('Saved'));
   const s = store.get('saved', []), r = await recents();
   const li = x => `<li><a class="row" href="${esc(x.href)}"><span class="k">${ico(x.key[0] === 'v' ? 'video' : x.key[0] === 'w' ? 'wiki' : x.key[0] === 't' ? 'book' : x.key[0] === 'a' ? 'ask' : 'page')}</span><span><b>${esc(x.title)}</b><small>${esc(rowSub(x))}</small></span></a></li>`;
   const cont = await resumable();
-  main.innerHTML = `<h1>Saved</h1><p class="lead">Kept on this device only.</p>
-  ${s.length ? `<div class="collection" style="margin-top:18px"><ul class="list">${s.map(li).join('')}</ul></div>` : `<div class="empty"><span class="e-ico">${ico('save')}</span><b>Nothing saved yet</b><p>Choose Save on any page, video, article or answer to keep it here.</p></div>`}
-  ${cont.length ? secHead('Continue watching') + rail(cont.map(([id, v]) => vcard({ id, title: v.title, thumb: v.thumb, duration: v.d }, { sub: 'Resume at ' + clock(v.t) })).join('')) : ''}
-  ${secHead('Recently opened')}${r.length ? `<div class="collection"><ul class="list">${r.map(li).join('')}</ul></div><p><button class="btn plain" id="clr">Clear recent list</button></p>` : '<div class="empty"><p>Pages you open will appear here.</p></div>'}`;
+  main.innerHTML = `<h1>${tr('Saved')}</h1><p class="lead">${tr('Kept on this device only.')}</p>
+  ${s.length ? `<div class="collection" style="margin-top:18px"><ul class="list">${s.map(li).join('')}</ul></div>` : `<div class="empty"><span class="e-ico">${ico('save')}</span><b>${tr('Nothing saved yet')}</b><p>${tr('Choose Save on any page, video, article or answer to keep it here.')}</p></div>`}
+  ${cont.length ? secHead(tr('Continue watching')) + rail(cont.map(([id, v]) => vcard({ id, title: v.title, thumb: v.thumb, duration: v.d }, { sub: tr('Resume at {time}', { time: clock(v.t) }) })).join('')) : ''}
+  ${secHead(tr('Recently opened'))}${r.length ? `<div class="collection"><ul class="list">${r.map(li).join('')}</ul></div><p><button class="btn plain" id="clr">${tr('Clear recent list')}</button></p>` : `<div class="empty"><p>${tr('Pages you open will appear here.')}</p></div>`}`;
   const c = $('#clr'); if (c) c.onclick = () => { store.set('recent', []); savedPage() };
 }
 
 /* -------------------------------------------------------------- about -- */
 // What the assistant cannot read, as a sentence: counts of none are left out, and one is one
-const many = (n, one, more) => `${n.toLocaleString()} ${n === 1 ? one : more}`;
+const SP = LB_LANG === 'en' ? ' ' : '';   // the space between two sentences; Japanese writes none
 function blind(c) {
   if (!c) return '';
   const nv = c.videos - c.videos_with_text, parts = [];
-  if (nv) parts.push(`${nv.toLocaleString()} of ${many(c.videos, 'video', 'videos')} ${nv === 1 ? 'has' : 'have'} no captions or transcript`);
-  if (c.pdfs_image_only) parts.push(`${many(c.pdfs_image_only, 'PDF is a scan', 'PDFs are scans')} without text`);
-  if (c.docs_without_text) parts.push(`${many(c.docs_without_text, 'document', 'documents')} gave no readable text when indexed`);
+  if (nv) { const v = { nv: nv.toLocaleString(), n: c.videos.toLocaleString() }; parts.push(c.videos === 1 ? tr('{nv} of {n} video has no captions or transcript', v) : nv === 1 ? tr('{nv} of {n} videos has no captions or transcript', v) : tr('{nv} of {n} videos have no captions or transcript', v)) }
+  if (c.pdfs_image_only) parts.push(c.pdfs_image_only === 1 ? tr('1 PDF is a scan without text') : tr('{n} PDFs are scans without text', { n: c.pdfs_image_only.toLocaleString() }));
+  if (c.docs_without_text) parts.push(c.docs_without_text === 1 ? tr('1 document gave no readable text when indexed') : tr('{n} documents gave no readable text when indexed', { n: c.docs_without_text.toLocaleString() }));
   if (!parts.length) return '';
-  const t = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0];
-  return t[0].toUpperCase() + t.slice(1) + '. ';
+  const t = parts.length === 1 ? parts[0] : parts.length === 2 ? tr('{a} and {b}', { a: parts[0], b: parts[1] }) : tr('{a}, {b} and {c}', { a: parts[0], b: parts[1], c: parts[2] });
+  return tr('{list}.', { list: t[0].toUpperCase() + t.slice(1) }) + SP;
 }
 // The optional local AI in the desktop app: what it is, where it runs, and its controls. '' in the server version.
 function localAbout(st) {
   const l = st.local; if (!l) return '';
   const gb = n => (n / 1e9).toFixed(1) + ' GB';
-  const where = (l.placement || []).filter(p => p.bytes > 2e8).map(p => `${gb(p.bytes)} on ${esc(p.device)}`).join(', ');
-  const line = { ready: 'running now', stopped: 'ready; it starts when you ask and stops after 15 minutes unused', loading: 'starting' }[l.state];
+  const where = (l.placement || []).filter(p => p.bytes > 2e8).map(p => tr('{size} on {device}', { size: gb(p.bytes), device: esc(p.device) })).join(', ');
+  const line = { ready: tr('running now'), stopped: tr('ready; it starts when you ask and stops after 15 minutes unused'), loading: tr('starting') }[l.state];
   const btn = (a, t) => `<button class="btn plain" onclick="localAI('${a}')">${t}</button>`;
-  return line ? `Local AI: ${esc(l.name)}, ${line}.${where ? ` It uses ${where}.` : ''} It reads text only.
-      <span class="row">${l.state === 'ready' ? btn('stop', 'Stop it now') : ''}${btn('off', 'Turn off')}</span>`
-    : l.state === 'off' ? `The local AI is turned off. ${btn('on', 'Turn on')}`
-    : `Local AI: ${esc(l.message || { absent: 'not added. Add it in Library and local AI (about 17 GB).', checking: 'checking the file…', measuring: 'checking this computer’s memory…' }[l.state] || l.state)} ${l.state === 'absent' ? '<a class="btn plain" href="/ui/setup.html#manage">Add the local AI</a>' : ''}${btn('rescan', 'Look again')}`;
+  return line ? `${tr('Local AI: {status}.', { status: esc(l.name) + ', ' + line })}${where ? SP + tr('It uses {where}.', { where }) : ''}${SP}${tr('It reads text only.')}
+      <span class="row">${l.state === 'ready' ? btn('stop', tr('Stop it now')) : ''}${btn('off', tr('Turn off'))}</span>`
+    : l.state === 'off' ? `${tr('The local AI is turned off.')} ${btn('on', tr('Turn on'))}`
+    : `${tr('Local AI: {status}', { status: esc(l.message || { absent: tr('not added. Add it in Library and local AI (about 17 GB).'), checking: tr('checking the file…'), measuring: tr('checking this computer’s memory…') }[l.state] || l.state) })} ${l.state === 'absent' ? `<a class="btn plain" href="/ui/setup.html#manage">${tr('Add the local AI')}</a>` : ''}${btn('rescan', tr('Look again'))}`;
 }
 async function localAI(action) {
   try { await fetch('/api/assistant/local', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }) } catch { }
   setTimeout(() => { if (location.hash.startsWith('#/about')) route() }, 400);
 }
 async function about() {
-  setTitle('About this library');
+  setTitle(tr('About this library'));
   let dl = {}, st = {};
   LIB = null;   // About shows the counts as they are now
   const s = await libInfo();
@@ -1072,31 +1074,31 @@ async function about() {
   try { dl = await api('/api/download-status') } catch { }
   try { st = await fetch('/api/assistant/status').then(r => r.json()) } catch { }   // not api(): this answer names an error when no model is running, and still holds what is wanted
   const ch = dl.channels && dl.channels.counts, ix = st.index || {};
-  main.innerHTML = `<h1>About this library</h1>
-  <p class="lead">Public manuals, health guides, courses, videos and encyclopedias kept on this computer, so it works when the internet and phones don’t.</p>
+  main.innerHTML = `<h1>${tr('About this library')}</h1>
+  <p class="lead">${tr('Public manuals, health guides, courses, videos and encyclopedias kept on this computer, so it works when the internet and phones don’t.')}</p>
   <div class="cards2" style="margin-top:16px">
-   <div class="card"><b>What’s in it</b><small>${(s.pdfs || 0).toLocaleString()} PDF manuals (${(s.pdf_pages || 0).toLocaleString()} pages), ${(s.web_pages || 0).toLocaleString()} saved web pages, ${(s.videos || 0).toLocaleString()} downloaded videos and ${s.collections || 0} complete encyclopedias.</small></div>
-   ${ch ? `<div class="card"><b>Still arriving</b><small>${ch.pending.toLocaleString()} more videos are queued and ${ch.downloading} downloading. Queued videos are not in the library yet — they appear only once downloaded.</small></div>` : ''}
-   <div class="card"><b>Assistant</b><small>${localAbout(st) || (st.online ? `Local model ${esc(st.model)} — available.` : 'No local model is running, so Chat can’t write answers right now. Guides, search, videos and the map all work without one.')} ${ix.chunks ? `Meaning-based index: ${ix.chunks.toLocaleString()} passages from ${ix.docs.toLocaleString()} documents${ix.pending ? `, ${ix.pending.toLocaleString()} still to index` : ''}.` : ''}</small></div>
-   <div class="card"><b>What the assistant can’t see</b><small>${blind(st.coverage)}It also can’t see pictures in videos or raw map data. It reads text${st.vision === false ? '' : ' (and page images when it asks to)'} and says when it finds nothing.${st.coverage && st.coverage.remote_videos ? ` ${st.coverage.remote_videos} videos are stored on a remote drive and play only when that computer is reachable.` : ''}</small></div>
+   <div class="card"><b>${tr('What’s in it')}</b><small>${tr('{pdfs} PDF manuals ({pages} pages), {web} saved web pages, {videos} downloaded videos and {zims} complete encyclopedias.', { pdfs: (s.pdfs || 0).toLocaleString(), pages: (s.pdf_pages || 0).toLocaleString(), web: (s.web_pages || 0).toLocaleString(), videos: (s.videos || 0).toLocaleString(), zims: s.collections || 0 })}</small></div>
+   ${ch ? `<div class="card"><b>${tr('Still arriving')}</b><small>${tr('{pending} more videos are queued and {downloading} downloading. Queued videos are not in the library yet — they appear only once downloaded.', { pending: ch.pending.toLocaleString(), downloading: ch.downloading })}</small></div>` : ''}
+   <div class="card"><b>${tr('Assistant')}</b><small>${localAbout(st) || (st.online ? tr('Local model {model} — available.', { model: esc(st.model) }) : tr('No local model is running, so Chat can’t write answers right now. Guides, search, videos and the map all work without one.'))} ${ix.chunks ? (ix.pending ? tr('Meaning-based index: {chunks} passages from {docs} documents, {pending} still to index.', { chunks: ix.chunks.toLocaleString(), docs: ix.docs.toLocaleString(), pending: ix.pending.toLocaleString() }) : tr('Meaning-based index: {chunks} passages from {docs} documents.', { chunks: ix.chunks.toLocaleString(), docs: ix.docs.toLocaleString() })) : ''}</small></div>
+   <div class="card"><b>${tr('What the assistant can’t see')}</b><small>${blind(st.coverage)}${st.vision === false ? tr('It also can’t see pictures in videos or raw map data. It reads text and says when it finds nothing.') : tr('It also can’t see pictures in videos or raw map data. It reads text (and page images when it asks to) and says when it finds nothing.')}${st.coverage && st.coverage.remote_videos ? SP + tr('{n} videos are stored on a remote drive and play only when that computer is reachable.', { n: st.coverage.remote_videos }) : ''}</small></div>
    ${IN_WINDOW && window.LBUpdate ? LBUpdate.card() : ''}
    ${langCard()}
   </div>
-  <h2>How sources are labelled</h2><ul>
-   <li><b>International health &amp; humanitarian guidance</b> — WHO, Red Cross / Red Crescent, MSF, UNICEF, Sphere, St John Ambulance.</li>
-   <li><b>Hesperian community health guide</b> — “Where There Is No Doctor” and related books.</li>
-   <li><b>Government guidance</b> — FEMA, CDC, EPA, USDA, NOAA, National Park Service and similar.</li>
-   <li><b>University / extension service</b> — e.g. National Center for Home Food Preservation, UC extension.</li>
-   <li><b>Manufacturer manual</b> — only for the exact model named.</li>
-   <li><b>Community-written encyclopedia</b> and <b>hobbyist video</b> — background; check anything risky against a manual.</li></ul>
-  <h2>What this guide does not do</h2><ul>
-   <li>It points to original pages; the guides don’t write their own medical, chemical or electrical instructions. The assistant’s answers mark which sentences come from a cited page and which are its own wording.</li>
-   <li>Nothing here replaces trained help. Each guide shows the sources’ own limits.</li>
-   <li>Reading and watching are not the same as practising. Your ticks stay on this device.</li>
-   ${s.pack ? '' : '<li>Shopping lists and carts in older reports are plans, not proof of supplies you own.</li>'}</ul>
-  ${s.sources ? `<h2>Sources and credits</h2><p><a href="#/read/${encodeURIComponent(s.sources)}?${fromQ()}">Sources and permissions</a>: every publisher in this library, where it came from, and how to ask for something to be removed.</p>` : ''}
-  ${IN_WINDOW ? '' : '<h2>Using it on a phone</h2><p>Phones on the same Wi-Fi (no internet needed) can use the guide when this computer starts it with <code>server.py --lan</code>. Phones need the access link shown in the terminal the first time.</p>'}
-  ${oldServer ? '<h2>Other ways in</h2><p><a href="/reports/gap-closure-status.html" target="_blank">Gap closure report</a> · <a href="/reports/learning-pathways.html" target="_blank">Learning pathways report</a> · <a href="/reports/survival-tools-cart.html" target="_blank">Supplies planning</a></p>' : ''}`;
+  <h2>${tr('How sources are labelled')}</h2><ul>
+   <li>${tr('<b>International health &amp; humanitarian guidance</b> — WHO, Red Cross / Red Crescent, MSF, UNICEF, Sphere, St John Ambulance.')}</li>
+   <li>${tr('<b>Hesperian community health guide</b> — “Where There Is No Doctor” and related books.')}</li>
+   <li>${tr('<b>Government guidance</b> — FEMA, CDC, EPA, USDA, NOAA, National Park Service and similar.')}</li>
+   <li>${tr('<b>University / extension service</b> — e.g. National Center for Home Food Preservation, UC extension.')}</li>
+   <li>${tr('<b>Manufacturer manual</b> — only for the exact model named.')}</li>
+   <li>${tr('<b>Community-written encyclopedia</b> and <b>hobbyist video</b> — background; check anything risky against a manual.')}</li></ul>
+  <h2>${tr('What this guide does not do')}</h2><ul>
+   <li>${tr('It points to original pages; the guides don’t write their own medical, chemical or electrical instructions. The assistant’s answers mark which sentences come from a cited page and which are its own wording.')}</li>
+   <li>${tr('Nothing here replaces trained help. Each guide shows the sources’ own limits.')}</li>
+   <li>${tr('Reading and watching are not the same as practising. Your ticks stay on this device.')}</li>
+   ${s.pack ? '' : `<li>${tr('Shopping lists and carts in older reports are plans, not proof of supplies you own.')}</li>`}</ul>
+  ${s.sources ? `<h2>${tr('Sources and credits')}</h2><p>${tr('<a href="{href}">Sources and permissions</a>: every publisher in this library, where it came from, and how to ask for something to be removed.', { href: `#/read/${encodeURIComponent(s.sources)}?${fromQ()}` })}</p>` : ''}
+  ${IN_WINDOW ? '' : `<h2>${tr('Using it on a phone')}</h2><p>${tr('Phones on the same Wi-Fi (no internet needed) can use the guide when this computer starts it with <code>server.py --lan</code>. Phones need the access link shown in the terminal the first time.')}</p>`}
+  ${oldServer ? `<h2>${tr('Other ways in')}</h2><p><a href="/reports/gap-closure-status.html" target="_blank">${tr('Gap closure report')}</a> · <a href="/reports/learning-pathways.html" target="_blank">${tr('Learning pathways report')}</a> · <a href="/reports/survival-tools-cart.html" target="_blank">${tr('Supplies planning')}</a></p>` : ''}`;
   if (IN_WINDOW && window.LBUpdate) LBUpdate.mount(main);   // Check for updates (web/update.js): only when the person asks
   const ls = $('#langSel', main); if (ls) ls.onchange = () => setLang(ls.value || null);
 }

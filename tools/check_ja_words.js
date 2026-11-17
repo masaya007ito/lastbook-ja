@@ -12,8 +12,12 @@ const WEB = path.join(__dirname, '..', 'web');
 const only = process.argv.slice(2);
 
 const dict = {};
-global.lbWords = (lang, words) => { if (lang === 'ja') for (const k of Object.keys(words)) { if (k in dict) console.log(`duplicate entry: ${JSON.stringify(k)}`); dict[k] = words[k] } };
+const byFile = {};   // dictionary file -> its entries
+// setup.html loads only its own dictionary, so a text both pages use has an entry in each. That is fine while they agree.
+let loading = null;
+global.lbWords = (lang, words) => { if (lang === 'ja') for (const k of Object.keys(words)) { if (k in dict && dict[k] !== words[k]) { console.log(`two different translations: ${JSON.stringify(k)} -> ${JSON.stringify(dict[k])} / ${JSON.stringify(words[k])}`); process.exitCode = 1 } dict[k] = words[k]; byFile[loading][k] = words[k] } };
 for (const f of fs.readdirSync(WEB).filter(f => /^i18n-ja-.*\.js$/.test(f)).sort()) {
+  loading = f; byFile[f] = {};
   try { require(path.join(WEB, f)) } catch (e) { console.log(`${f}: ${e.message}`); process.exitCode = 1 }
 }
 
@@ -30,6 +34,21 @@ for (const f of fs.readdirSync(WEB).filter(f => /\.(js|html)$/.test(f) && !/^i18
   }
   for (const m of src.matchAll(/data-i18n(?:-aria|-title|-placeholder)?="([^"]*)"/g)) add(m[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
 }
+
+// Each page has only the dictionaries it loads: a text on the main screen with its entry only in setup's file shows in English.
+const pageMissing = [];
+for (const page of fs.readdirSync(WEB).filter(f => /\.html$/.test(f))) {
+  const html = fs.readFileSync(path.join(WEB, page), 'utf8');
+  const scripts = [...html.matchAll(/<script src="\/ui\/([^"?]+)/g)].map(m => m[1]);
+  const dicts = scripts.filter(f => byFile[f]);
+  if (!dicts.length) continue;
+  const files = new Set([page, ...scripts.filter(f => !/^i18n/.test(f))]);
+  for (const [t, where] of used) {
+    if ([...where].some(f => files.has(f)) && !dicts.some(d => t in byFile[d]) && t in dict) pageMissing.push(`missing on ${page}: ${JSON.stringify(t)}  (entry only in ${Object.keys(byFile).filter(d => t in byFile[d]).join(', ')})`);
+  }
+}
+for (const line of pageMissing) console.log(line);
+if (pageMissing.length) process.exitCode = 1;
 
 const inScope = t => !only.length || [...used.get(t)].some(f => only.includes(f));
 const missing = [...used.keys()].filter(t => !(t in dict) && inScope(t));

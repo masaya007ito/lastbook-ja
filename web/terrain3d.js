@@ -62,9 +62,9 @@ const Terrain3D = (() => {
   async function open(wrap, o) {
     close();
     const box = document.createElement('div'); box.className = 't3d';
-    box.innerHTML = `<canvas></canvas><div class="bar"><button data-a="exit">✕ Exit 3D</button>
-      <label title="Exaggerate heights">Height ×<input type="range" min="1" max="5" step="0.5" value="${o.z < 10 ? 3 : 1.5}"><span></span></label>
-      <button data-a="reset">Reset view</button></div><div class="hint">Loading elevation…</div>`;
+    box.innerHTML = `<canvas></canvas><div class="bar"><button data-a="exit">${tr('✕ Exit 3D')}</button>
+      <label title="${tr('Exaggerate heights')}">${tr('Height ×')}<input type="range" min="1" max="5" step="0.5" value="${o.z < 10 ? 3 : 1.5}"><span></span></label>
+      <button data-a="reset">${tr('Reset view')}</button></div><div class="hint">${tr('Loading elevation…')}</div>`;
     wrap.appendChild(box);
     const cv = box.querySelector('canvas'), hint = box.querySelector('.hint'), range = box.querySelector('input');
     const me = cur = { box, alive: true };  // this session: checks after each await use me, not whatever cur is by then
@@ -87,7 +87,7 @@ const Terrain3D = (() => {
       let waiting = 0;
       for (const k of need) { const [z, x, y] = k.split('/').map(Number); if (o.getDem(z, x, y) === undefined) { o.demTile(z, x, y); waiting++ } }
       if (!waiting || !me.alive) break;
-      hint.textContent = `Loading elevation… ${need.size - waiting}/${need.size}`;
+      hint.textContent = tr('Loading elevation… {done}/{total}', { done: need.size - waiting, total: need.size });
       await new Promise(r => setTimeout(r, 150));
     }
     if (!me.alive) return;
@@ -106,7 +106,7 @@ const Terrain3D = (() => {
     let hmin = Infinity, hmax = -Infinity;
     for (let j = 0; j <= M; j++) for (let i = 0; i <= N; i++) { const v = height(latAt(j), lonAt(i)); hts[j * (N + 1) + i] = v; if (v < hmin) hmin = v; if (v > hmax) hmax = v }
     const gl = cv.getContext('webgl', { antialias: true, preserveDrawingBuffer: false });
-    if (!gl) { hint.textContent = '3D needs WebGL, which this browser has turned off.'; return }
+    if (!gl) { hint.textContent = tr('3D needs WebGL, which this browser has turned off.'); return }
     const prog = program(gl, VS, FS), bprog = program(gl, BVS, BFS);
     gl.useProgram(prog);
     const pos = new Float32Array((N + 1) * (M + 1) * 3), uv = new Float32Array((N + 1) * (M + 1) * 2), nrm = new Float32Array((N + 1) * (M + 1) * 3);
@@ -165,7 +165,7 @@ const Terrain3D = (() => {
       B.count = P.length / 3;
     }
     async function loadBldg() {
-      if (W > BLDG_MAX_SPAN || Hm > BLDG_MAX_SPAN) return 'Zoom in to a town to see 3D buildings.';
+      if (W > BLDG_MAX_SPAN || Hm > BLDG_MAX_SPAN) return tr('Zoom in to a town to see 3D buildings.');
       const sc = 2 ** (30 - Z), X0 = (cx - hw) * sc, X1 = (cx + hw) * sc, Y0 = (cy - hh) * sc, Y1 = (cy + hh) * sc;
       const tiles = [];
       for (let ty = Math.floor(Y0 / 65536); ty <= Math.floor(Y1 / 65536); ty++)
@@ -224,7 +224,9 @@ const Terrain3D = (() => {
       B.list = list; buildBldg(ex); render();
       if (!list.length) return '';
       const measured = list.filter(f => f.osm).length, guessed = list.filter(f => !f.est).length;
-      return `${list.length.toLocaleString()} buildings${capped ? ' (nearest shown)' : ''} · ${measured ? `${measured.toLocaleString()} with mapped heights (OpenStreetMap), the rest ` : 'heights are '}satellite estimates${guessed ? `; ${guessed.toLocaleString()} without one shown one storey tall` : ''}`;
+      return [capped ? tr('{n} buildings (nearest shown)', { n: list.length.toLocaleString() }) : tr('{n} buildings', { n: list.length.toLocaleString() }),
+        measured ? tr('{n} with mapped heights (OpenStreetMap), the rest satellite estimates', { n: measured.toLocaleString() }) : tr('heights are satellite estimates'),
+        guessed ? tr('{n} without a height shown one storey tall', { n: guessed.toLocaleString() }) : ''].filter(Boolean).join(' · ');
     }
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
     // the 2D map (streets, labels, pins) becomes the ground texture
@@ -281,8 +283,8 @@ const Terrain3D = (() => {
     me.ro = new ResizeObserver(render); me.ro.observe(cv);
     setEx();
     const rel = hmax - hmin;
-    const base = rel < 1 ? 'No elevation data here (ocean or outside the US).' : `${matchMedia('(pointer: coarse)').matches ? 'Drag to turn and tilt · pinch to zoom' : 'Drag to rotate · scroll to zoom · shift-drag to tilt'} · ${Math.round(hmin * 3.28084).toLocaleString()}–${Math.round(hmax * 3.28084).toLocaleString()} ft`;
-    hint.textContent = base + (W <= BLDG_MAX_SPAN && Hm <= BLDG_MAX_SPAN ? ' · loading buildings…' : '');
+    const base = rel < 1 ? tr('No elevation data here (ocean or outside the US).') : `${matchMedia('(pointer: coarse)').matches ? tr('Drag to turn and tilt · pinch to zoom') : tr('Drag to rotate · scroll to zoom · shift-drag to tilt')} · ${Math.round(hmin * 3.28084).toLocaleString()}–${Math.round(hmax * 3.28084).toLocaleString()} ft`;
+    hint.textContent = base + (W <= BLDG_MAX_SPAN && Hm <= BLDG_MAX_SPAN ? ' · ' + tr('loading buildings…') : '');
     const note = await loadBldg();
     if (!me.alive) return;
     hint.textContent = note ? `${base} · ${note}` : base;
