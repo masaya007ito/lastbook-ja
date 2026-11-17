@@ -1968,7 +1968,7 @@ class Handler(library.Handler):
             emit({'type': 'error', 'error': 'model_unavailable', 'text': 'The local assistant model is not running right now.'})
             return
         try:
-            assistant.chat(msgs, about, emit, lambda: gone[0], lang=lang)
+            assistant.chat(msgs, about, emit, lambda: gone[0], **({'lang': lang} if lang != 'en' else {}))   # English: called exactly as before
         except Exception as e:
             traceback.print_exc()
             emit({'type': 'error', 'error': 'internal', 'text': f'The assistant stopped on an internal error ({type(e).__name__}).'})

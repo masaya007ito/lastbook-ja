@@ -265,7 +265,7 @@ const Chat = (() => {
       else pv = `<span class="pv w">${ico(s.kind === 'place' ? 'pin' : 'page')}</span>`;
       const where = s.kind === 'video' ? (s.t != null ? tr('at {time}', { time: clock(s.t) }) : '') : s.page ? (s.pages ? tr('page {page} of {pages}', { page: s.page, pages: s.pages }) : tr('page {page}', { page: s.page })) : '';
       return `<a class="srccard" href="${srcHref(s)}" id="src-${esc(s.key || '')}">${pv}<span class="sc-body">${s.key ? `<span class="sc-key">${esc(s.key.replace(/^S/, ''))}</span>` : ''}<b>${esc(s.title)}</b>
-        <small>${esc(s.publisher || '')}${s.year ? ' · ' + esc(s.year) : ''}${where ? ' · ' + where : ''}${s.trust ? ' · ' + esc(s.trust) : ''}</small>
+        <small>${esc(s.publisher || '')}${s.year ? ' · ' + esc(s.year) : ''}${where ? ' · ' + where : ''}${s.trust ? ' · ' + esc(tr(s.trust)) : ''}</small>
         ${!compact && s.excerpt ? `<span class="sc-ex">“${esc(s.excerpt.slice(0, 220))}${s.excerpt.length > 220 ? '…' : ''}”</span>` : ''}
         ${s.image ? `<span class="sc-tag">${tr('diagram viewed')}</span>` : ''}</span></a>`;
     }).join('')}</div>`;
@@ -412,8 +412,8 @@ const Chat = (() => {
     else if (ev.type === 'reset') m.content = '';
     else if (ev.type === 'done') { m.content = ev.answer; m.cited = ev.sources; m.consulted = ev.consulted; m.invalid = ev.invalid; m.latency = ev.latency; m.content = m.content.replace(/\[([SM]\d+)\]/g, (x, k) => (ev.invalid || []).includes(k) ? '' : x) }
     else if (ev.type === 'error') {
-      if (ev.error === 'model_unavailable') { m.offline = true; m.error = ev.text; fallback(m, (cur.messages[cur.messages.length - 2] || {}).content || '') }
-      else { m.error = ev.text; if (ev.sources) m.fallback = ev.sources.slice(0, 8) }
+      if (ev.error === 'model_unavailable') { m.offline = true; m.error = tr(ev.text); fallback(m, (cur.messages[cur.messages.length - 2] || {}).content || '') }
+      else { m.error = tr(ev.text); if (ev.sources) m.fallback = ev.sources.slice(0, 8) }
     }
     else if (ev.type === 'stopped') m.stopped = true;
   }

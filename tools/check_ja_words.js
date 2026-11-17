@@ -52,7 +52,8 @@ if (pageMissing.length) process.exitCode = 1;
 
 const inScope = t => !only.length || [...used.get(t)].some(f => only.includes(f));
 const missing = [...used.keys()].filter(t => !(t in dict) && inScope(t));
-const unused = only.length ? [] : Object.keys(dict).filter(t => !used.has(t));
+// i18n-ja-server.js entries are reached through tr(variable) (labels the server sends), so they never look used.
+const unused = only.length ? [] : Object.keys(dict).filter(t => !used.has(t) && !(t in byFile['i18n-ja-server.js'] || {}));
 const badVars = Object.keys(dict).filter(k => { const a = (k.match(/\{\w+\}/g) || []).sort().join(), b = (String(dict[k]).match(/\{\w+\}/g) || []).sort().join(); return a !== b });
 for (const t of missing) console.log(`missing: ${JSON.stringify(t)}  (${[...used.get(t)].join(', ')})`);
 for (const t of unused) console.log(`unused entry: ${JSON.stringify(t)}`);

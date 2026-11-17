@@ -83,7 +83,7 @@ const MapView = (() => {
   const kmBetween = (a, b, c, d) => { const r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2; return 12742 * Math.asin(Math.sqrt(x)) };
   const sym = (l, size = 22) => `<i class="msym" style="background:${l.col};width:${size}px;height:${size}px">${escH(l.sym)}</i>`;
   const layerOf = cls => BY_CLS[cls] || { sym: '•', col: '#555', label: cls };
-  const unnamed = p => p.name || (p.detail?.reservoir_type ? p.detail.reservoir_type : tr('Unnamed {name}', { name: (p.label || layerOf(p.cls).label).replace(/ ?[(（].*[)）]/, '').replace(/^Recorded /, '').toLowerCase() }));
+  const unnamed = p => p.name || (p.detail?.reservoir_type ? p.detail.reservoir_type : tr('Unnamed {name}', { name: (p.label ? tr(p.label) : layerOf(p.cls).label).replace(/ ?[(（].*[)）]/, '').replace(/^Recorded /, '').toLowerCase() }));
 
   let askedHome = false;
   async function localHome() {
@@ -177,7 +177,7 @@ const MapView = (() => {
       if (!st) return;
       st.national = info.national; st.ver = info.version; st.aerialDetail = info.aerial_detail; st.aerialRev = info.aerial_rev; st.terrainCircle = info.terrain_circle;
       describe(info); if (openWhole) fit(wholeMap(), 0.92, true); coverage(); draw();
-      $('mdata').innerHTML = info.datasets.map(d => `<li class="row" style="display:block"><b>${escH(d.label)}</b><span class="muted">${escH(d.status)}</span>${d.bytes ? ` · ${(d.bytes / 1073741824).toFixed(1)} GB` : ''}</li>`).join('') +
+      $('mdata').innerHTML = info.datasets.map(d => `<li class="row" style="display:block"><b>${escH(tr(d.label))}</b><span class="muted">${escH(tr(d.status))}</span>${d.bytes ? ` · ${(d.bytes / 1073741824).toFixed(1)} GB` : ''}</li>`).join('') +
         (st.have && !st.have.size ? '' : `<li class="row small muted" style="display:block">${st.have ? '' : tr('Not drawn yet: forest types.') + ' '}${tr('Resource layers are records — fish, wells, mines and crops show where they were recorded or mapped, not proof of what is there now.')}</li>`);
     }).catch(() => { $('mdata').innerHTML = `<li class="muted">${tr('Map details unavailable.')}</li>`; if (openWhole && st) fit(US, 0.92, true) });
     // When map data changes (national build, water import), quietly refresh visible tiles; old tiles stay up until new ones arrive.
@@ -317,7 +317,7 @@ const MapView = (() => {
     if (!hit) return hideTip();
     tip.innerHTML = hit.count > 1 && !hit.spot ? `<b>${escH(tr('{n} places', { n: hit.count.toLocaleString() }))}</b>${breakdown(hit)}<small>${st.z >= 16 ? tr('Click to list them') : tr('Click to zoom in')}</small>`
       : hit.count > 1 ? `<b>${escH(tr('{n} records at one spot', { n: hit.count }))}</b><small>${escH(tr('{label} · click to list them', { label: layerOf(hit.cls).label }))}</small>`
-      : `<b>${escH(hit.place ? hit.name : unnamed(hit))}</b><small>${escH(hit.place ? hit.kind || tr('Place') : layerOf(hit.cls).label)}${hit.records > 1 ? ` · ${escH(tr('{n} records · click to list', { n: hit.records }))}` : ''}</small>`;
+      : `<b>${escH(hit.place ? hit.name : unnamed(hit))}</b><small>${escH(hit.place ? (hit.kind ? tr(hit.kind) : tr('Place')) : layerOf(hit.cls).label)}${hit.records > 1 ? ` · ${escH(tr('{n} records · click to list', { n: hit.records }))}` : ''}</small>`;
     tip.hidden = false; placeTip(x, y);
   }
   function breakdown(p) {
@@ -769,7 +769,7 @@ const MapView = (() => {
     pan(tx - x, ty - y); st.listAt = 1; settle(true);  // the nearby list stays put while the map makes room
   }
   function closeCard() { const el = $('card'); if (el) el.hidden = true; if (st) { st.sel = null; draw() } document.querySelectorAll('#near button.on').forEach(b => b.classList.remove('on')) }
-  function showPlace(p) { openCard(`<div class="kind"><i class="msym" style="background:#1565c0">◉</i>${escH(p.kind || tr('Place'))}</div><h3>${escH(p.name)}</h3>${p.detail ? `<p>${escH(p.detail)}</p>` : ''}${coordsBlock(p)}<div class="acts"><button data-a="clear">${tr('Remove marker')}</button></div>`).querySelector('[data-a=clear]').onclick = () => { st.mark = null; closeCard() }; wireCoords(p) }
+  function showPlace(p) { openCard(`<div class="kind"><i class="msym" style="background:#1565c0">◉</i>${escH(p.kind ? tr(p.kind) : tr('Place'))}</div><h3>${escH(p.name)}</h3>${p.detail ? `<p>${escH(tr(p.detail))}</p>` : ''}${coordsBlock(p)}<div class="acts"><button data-a="clear">${tr('Remove marker')}</button></div>`).querySelector('[data-a=clear]').onclick = () => { st.mark = null; closeCard() }; wireCoords(p) }
   function coordsBlock(p) {
     const home = load('mapHome', HOME), km = home && kmBetween(home.lat, home.lon, p.lat, p.lon);
     const id = 'el' + Math.random().toString(36).slice(2, 8);
@@ -856,7 +856,7 @@ const MapView = (() => {
       box.classList.remove('busy');
       if (!Array.isArray(r) || !r.length) { box.innerHTML = `<p class="muted small">${tr('Nothing from your layers within about 100 miles of the map center.')}</p>`; return }
       const list = r.sort((a, b) => a.km - b.km).slice(0, 14);
-      box.innerHTML = list.map((p, i) => `<button data-i="${i}">${sym(layerOf(p.cls), 24)}<span><b>${escH(unnamed(p))}</b><small>${escH(layerOf(p.cls).label)} · ${dist(p.km)} ${escH(p.dir)}</small>${p.detail ? `<small>${escH(p.detail)}</small>` : ''}</span></button>`).join('');
+      box.innerHTML = list.map((p, i) => `<button data-i="${i}">${sym(layerOf(p.cls), 24)}<span><b>${escH(unnamed(p))}</b><small>${escH(layerOf(p.cls).label)} · ${dist(p.km)} ${escH(tr(p.dir))}</small>${p.detail ? `<small>${escH(p.detail)}</small>` : ''}</span></button>`).join('');
       box.querySelectorAll('button').forEach(b => b.onclick = () => {
         const p = list[+b.dataset.i]; box.querySelectorAll('button.on').forEach(x => x.classList.remove('on')); b.classList.add('on');
         st.z = Math.max(st.z, 16); st.lat = p.lat; st.lon = p.lon; st.listAt = 1; showDetail({ ...p, summary: p.detail, detail: {} }); settle(true); b.classList.add('on');
@@ -874,7 +874,7 @@ const MapView = (() => {
       if (st !== state || serial !== st.serial.place) return;
       if (!r.length) { const address = /^\s*\d[\w-]*\s+\S/.test(q); box.innerHTML = '<p class="muted small" style="padding:8px">' + (address ? tr('Address not found in your offline data. Check the house number and street.') + (IN_WINDOW ? ' <a href="/ui/setup.html#manage">' + tr('Add your state’s address search.') + '</a>' : '') : tr('No place by that name in the saved gazetteers. Try a town, county or 5-digit ZIP.')) + '</p>'; return }
       const pick = p => { box.hidden = true; st.mark = { lat: p.lat, lon: p.lon, name: p.name, kind: p.kind, detail: p.detail }; closeCard(); go(p.lat, p.lon, /county/i.test(p.kind) ? 10 : /ZIP|city|town|populated|^(Lake|Reservoir)$/i.test(p.kind) ? 13 : 15); st.cv.focus() };
-      box.innerHTML = `<div class="small muted" style="padding:4px 8px">${escH(r.length === 1 ? tr('1 match') : tr('{n} matches', { n: r.length }))}</div>` + r.map((p, i) => `<button data-i="${i}"><b>${escH(p.name)}</b><small>${escH(p.kind)} · ${escH(p.detail)}</small></button>`).join('');
+      box.innerHTML = `<div class="small muted" style="padding:4px 8px">${escH(r.length === 1 ? tr('1 match') : tr('{n} matches', { n: r.length }))}</div>` + r.map((p, i) => `<button data-i="${i}"><b>${escH(p.name)}</b><small>${escH(tr(p.kind || ''))} · ${escH(tr(p.detail || ''))}</small></button>`).join('');
       box.querySelectorAll('button').forEach(b => b.onclick = () => pick(r[+b.dataset.i]));
       if (r.length === 1) pick(r[0]);
     } catch { if (st === state) box.innerHTML = `<p class="muted small">${tr('Place finder unavailable.')}</p>` }

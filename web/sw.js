@@ -1,6 +1,6 @@
 // Keeps the app shell available so a clear message shows even if the library server is restarting.
 const SHELL = 'sg-shell-v4';
-const FILES = ['/', '/ui/plat.js', '/ui/app.css', '/ui/app.js', '/ui/map.js', '/ui/terrain3d.js', '/ui/chat.js', '/ui/words.js', '/ui/i18n.js', '/ui/i18n-ja-app.js', '/ui/i18n-ja-chat.js', '/ui/i18n-ja-map.js', '/ui/icon.svg'];
+const FILES = ['/', '/ui/plat.js', '/ui/app.css', '/ui/app.js', '/ui/map.js', '/ui/terrain3d.js', '/ui/chat.js', '/ui/words.js', '/ui/i18n.js', '/ui/i18n-ja-app.js', '/ui/i18n-ja-chat.js', '/ui/i18n-ja-map.js', '/ui/i18n-ja-server.js', '/ui/icon.svg'];
 self.addEventListener('install', e => e.waitUntil(caches.open(SHELL).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {
