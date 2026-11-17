@@ -33,7 +33,7 @@ if __name__ == '__main__':  # --data must be known before the paths below are wo
 
 import engine.paths as lastbook_paths  # noqa: E402  (data folder and program folder can differ in the packaged app)
 from engine.paths import ro_uri  # noqa: E402
-from engine import saved_pages, address_search  # noqa: E402
+from engine import saved_pages, address_search, ja_terms  # noqa: E402
 from engine.setup import api as setup_api  # noqa: E402  (the one module that may download: only when the person asks)
 HERE = lastbook_paths.DATA  # holds derived/
 APP = lastbook_paths.APP  # holds web/ and content/
@@ -187,9 +187,14 @@ def clean_title(r):
 
 
 # ------------------------------------------------------------------ topics ----
-def topics():
+LANGS = ('en', 'ja')   # interface languages; a guide without a translation is shown in English
+
+
+def topics(lang='en'):
     out = []
     for f in sorted((APP / 'content' / 'topics').glob('*.json')):
+        if lang != 'en' and (APP / 'content' / f'topics-{lang}' / f.name).is_file():
+            f = APP / 'content' / f'topics-{lang}' / f.name   # same structure and citations, words translated
         try:
             t = json.loads(f.read_text(encoding='utf-8'))
         except ValueError as e:
@@ -225,12 +230,17 @@ def resolve_item(i):
     return i
 
 
-def topics_resolved():
+def topics_resolved(lang='en'):
     res = []
     try:
         gaps = json.loads((APP / 'content' / 'gaps.json').read_text(encoding='utf-8'))
     except (OSError, ValueError):
         gaps = {}
+    if lang != 'en':
+        try:
+            gaps.update(json.loads((APP / 'content' / f'gaps-{lang}.json').read_text(encoding='utf-8')))
+        except (OSError, ValueError):
+            pass
     zims = zim_names()
 
     def here(items):
@@ -239,7 +249,7 @@ def topics_resolved():
     def still_useful(step):  # one that had things to open and has none left
         return step.get('goto') or step['read'] or not step['had']
 
-    for t in topics():
+    for t in topics(lang):
         t = dict(t)
         t['gaps'] = gaps.get(t['id'], {})
         for k in ('prepare', 'learn'):
@@ -344,7 +354,7 @@ def query_groups(q):
 
 @functools.lru_cache(maxsize=256)
 def find(q, kind='all', limit=30):
-    content, groups = query_groups(q)
+    content, groups = query_groups(ja_terms.to_english(q))   # the library is English: Japanese words become its words
     if not groups:
         return {'q': q, 'results': [], 'expanded': []}
     con = sqlite3.connect(ro_uri(library.DB), uri=True)
@@ -1937,6 +1947,7 @@ class Handler(library.Handler):
             return self.send_json({'error': 'bad request'}, 400)
         msgs = [m for m in (req.get('messages') or []) if isinstance(m, dict)][-12:]
         about = str(req.get('about') or '')[:200] or None
+        lang = req.get('lang') if req.get('lang') in LANGS else 'en'
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream')
         self.send_header('Cache-Control', 'no-cache')
@@ -1957,7 +1968,7 @@ class Handler(library.Handler):
             emit({'type': 'error', 'error': 'model_unavailable', 'text': 'The local assistant model is not running right now.'})
             return
         try:
-            assistant.chat(msgs, about, emit, lambda: gone[0])
+            assistant.chat(msgs, about, emit, lambda: gone[0], lang=lang)
         except Exception as e:
             traceback.print_exc()
             emit({'type': 'error', 'error': 'internal', 'text': f'The assistant stopped on an internal error ({type(e).__name__}).'})
@@ -1991,7 +2002,8 @@ class Handler(library.Handler):
             if path == '/sw.js':
                 return self.send_static(WEB / 'sw.js')
             if path == '/api/topics':
-                return self.send_json(topics_resolved())
+                lang = qs.get('lang', 'en')
+                return self.send_json(topics_resolved(lang if lang in LANGS else 'en'))
             if path == '/api/find':
                 return self.send_json(find(qs.get('q', '')[:200], qs.get('kind', 'all')))
             if path.startswith('/api/doc/'):

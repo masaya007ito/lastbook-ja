@@ -106,8 +106,8 @@ const libInfo = () => LIB || (LIB = api('/api/library').catch(() => { LIB = null
 let TOPICS = null;
 async function topics() {
   if (TOPICS) return TOPICS;
-  try { TOPICS = await api('/api/topics'); store.set('topicsCache', TOPICS) }
-  catch (e) { TOPICS = store.get('topicsCache', null); if (!TOPICS) throw e }
+  try { TOPICS = await api('/api/topics?lang=' + LB_LANG); store.set('topicsCache.' + LB_LANG, TOPICS) }
+  catch (e) { TOPICS = store.get('topicsCache.' + LB_LANG, null); if (!TOPICS) throw e }
   return TOPICS;
 }
 const topicById = id => (TOPICS || []).find(t => t.id === id);
@@ -1080,6 +1080,7 @@ async function about() {
    <div class="card"><b>Assistant</b><small>${localAbout(st) || (st.online ? `Local model ${esc(st.model)} — available.` : 'No local model is running, so Chat can’t write answers right now. Guides, search, videos and the map all work without one.')} ${ix.chunks ? `Meaning-based index: ${ix.chunks.toLocaleString()} passages from ${ix.docs.toLocaleString()} documents${ix.pending ? `, ${ix.pending.toLocaleString()} still to index` : ''}.` : ''}</small></div>
    <div class="card"><b>What the assistant can’t see</b><small>${blind(st.coverage)}It also can’t see pictures in videos or raw map data. It reads text${st.vision === false ? '' : ' (and page images when it asks to)'} and says when it finds nothing.${st.coverage && st.coverage.remote_videos ? ` ${st.coverage.remote_videos} videos are stored on a remote drive and play only when that computer is reachable.` : ''}</small></div>
    ${IN_WINDOW && window.LBUpdate ? LBUpdate.card() : ''}
+   ${langCard()}
   </div>
   <h2>How sources are labelled</h2><ul>
    <li><b>International health &amp; humanitarian guidance</b> — WHO, Red Cross / Red Crescent, MSF, UNICEF, Sphere, St John Ambulance.</li>
@@ -1097,6 +1098,14 @@ async function about() {
   ${IN_WINDOW ? '' : '<h2>Using it on a phone</h2><p>Phones on the same Wi-Fi (no internet needed) can use the guide when this computer starts it with <code>server.py --lan</code>. Phones need the access link shown in the terminal the first time.</p>'}
   ${oldServer ? '<h2>Other ways in</h2><p><a href="/reports/gap-closure-status.html" target="_blank">Gap closure report</a> · <a href="/reports/learning-pathways.html" target="_blank">Learning pathways report</a> · <a href="/reports/survival-tools-cart.html" target="_blank">Supplies planning</a></p>' : ''}`;
   if (IN_WINDOW && window.LBUpdate) LBUpdate.mount(main);   // Check for updates (web/update.js): only when the person asks
+  const ls = $('#langSel', main); if (ls) ls.onchange = () => setLang(ls.value || null);
+}
+// Interface language (web/i18n.js). Each language names itself, so the choice can be found whichever language is showing.
+function langCard() {
+  const cur = lbLangChosen() || '';
+  const opt = (v, label) => `<option value="${v}"${cur === v ? ' selected' : ''}>${label}</option>`;
+  return `<div class="card"><b>Language · 言語</b><small><label for="langSel">${tr('Interface language. The library itself is in English.')}</label></small>
+   <select id="langSel" style="margin-top:8px">${opt('', tr('Same as this computer'))}${opt('en', 'English')}${opt('ja', '日本語')}</select></div>`;
 }
 
 route();

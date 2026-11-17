@@ -363,7 +363,7 @@ const Chat = (() => {
     try {
       const st = await getStatus();
       if (!st.online) throw Object.assign(new Error('offline'), { offline: true, why: st.local && localLine(st.local)[1] });
-      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history_(c).slice(0, -1).concat([{ role: 'user', content: text }]), about: c.about }), signal: ctl.signal });
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history_(c).slice(0, -1).concat([{ role: 'user', content: text }]), about: c.about, lang: LB_LANG }), signal: ctl.signal });
       if (!r.ok || !r.body) throw new Error('The server refused the question (' + r.status + ').');
       const rd = r.body.getReader(), dec = new TextDecoder();
       let buf = '';

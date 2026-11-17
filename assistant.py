@@ -7,6 +7,7 @@ gazetteer) and nothing else: no file paths, URLs or shell input are accepted fro
 import base64, json, re, socket, sqlite3, threading, time, urllib.error, urllib.request
 import retrieval
 from engine.paths import ro_uri
+from engine import ja_terms
 
 import os
 LOOPBACK = re.compile(r'http://(127\.0\.0\.1|\[::1\]):\d+(/[^\s]*)?')
@@ -114,6 +115,7 @@ def _allowed(kind):
 
 def hybrid(q, k=8, kind='any', doc=None):
     """Best passages for q from keyword and meaning-based search, fused, with provenance."""
+    q = ja_terms.to_english(q) or q   # the library is English; a Japanese question searches with English words
     cat = S.catalog()
     allowed = _allowed(kind)
     if doc:
@@ -338,6 +340,16 @@ How to answer:
 9. You cannot see what happens in videos without captions, scanned pages without text (unless you view the page image), or raw map files. Say so when it matters.
 Keep answers short and calm. Use simple markdown: **bold**, numbered or bulleted lists, and short headings."""
 
+# Added for a person reading the interface in Japanese. The library stays English, so searches stay English.
+LANG_RULES = {'ja': """
+Language: the person reads Japanese.
+- The library is in English. Always call search_library with English words (translate the question's key terms first). The initial search results you are given may be weak for a Japanese question; if so, search again in English.
+- Write the whole answer in natural, plain Japanese (です・ます調). Keep the citation keys exactly as they are, like [S2].
+- Translate what the sources say faithfully. Do not add steps, doses or quantities that are not in the source. Keep numbers and units as the source gives them; you may add the metric equivalent in brackets.
+- Source titles stay in English. Do not say the sources are Japanese.
+- Use these headings instead of the English ones: 「ライブラリに見つからないこと:」 for "Not found in the library:", 「資料によって異なる点:」 for "Sources disagree:", 「私自身の推論（ライブラリ外）:」 for "My own reasoning (not from the library):".
+- Advice in the sources may be written for the United States (911, FEMA, US agencies). Say so when it matters, and say that in Japan the emergency number is 119 (fire and ambulance) or 110 (police) only as your own reasoning."""}
+
 
 def context_for(about, sess):
     """Text for 'ask about this' — the open page, video moment or guide — registered as citable sources."""
@@ -485,11 +497,12 @@ def _fit_prompt(msgs, tools, llm_local):
         work[long]['content'] = work[long]['content'][:len(work[long]['content']) // 2] + '\n[…shortened to fit]'
 
 
-def chat(messages, about, emit, cancelled):
+def chat(messages, about, emit, cancelled, lang='en'):
     """Run one assistant turn. emit(event: dict) streams to the browser; cancelled() -> True stops early."""
     t0 = time.time()
     sess = Session()
-    msgs = [{'role': 'system', 'content': SYSTEM}]
+    rules = LANG_RULES.get(lang, '')
+    msgs = [{'role': 'system', 'content': SYSTEM + rules}]
     ctx = context_for(about, sess)
     if ctx:
         msgs.append({'role': 'system', 'content': ctx})
@@ -525,7 +538,7 @@ def chat(messages, about, emit, cancelled):
     local = local_on()
     tools = [t for t in TOOLS if t['function']['name'] != 'view_page'] if local else TOOLS   # the local model reads text only
     if local:
-        msgs[0] = {'role': 'system', 'content': SYSTEM_TEXT_ONLY}
+        msgs[0] = {'role': 'system', 'content': SYSTEM_TEXT_ONLY + rules}
         set_state('starting')
         shown = [None]
 
