@@ -95,6 +95,8 @@ class JapaneseSearch(unittest.TestCase):
     def test_text_is_stored_in_two_character_pieces(self):
         self.assertEqual(ja_search.grams('応急手当').split(), ['応急', '急手', '手当', '当'])
         self.assertEqual(ja_search.grams('ﾊﾟﾝ and AED').split(), ['パン', 'ン', 'and', 'aed'])
+        self.assertIn('とり', ja_search.grams('ひ\nとりで').split())          # a line the PDF wrapped is joined again
+        self.assertEqual(ja_search.grams('水\nwater').split(), ['水', 'water'])
 
     def test_words_inside_sentences_are_found(self):
         con = search_db()
@@ -204,6 +206,79 @@ class EncyclopediaSearch(unittest.TestCase):
             asked.clear()
             library.zim_hits(Arc(), 'burn first aid', Searcher, Query)
             self.assertEqual(asked, ['burn first aid'])        # English goes to the encyclopedia as it was typed
+
+
+def tiny_pdf(text):
+    """A one-page PDF whose text layer is text (ASCII)."""
+    content = f'BT /F1 12 Tf 72 720 Td ({text}) Tj ET'.encode()
+    objs = [b'<< /Type /Catalog /Pages 2 0 R >>', b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+            b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+            b'<< /Length ' + str(len(content)).encode() + b' >>\nstream\n' + content + b'\nendstream',
+            b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
+    out, offsets = bytearray(b'%PDF-1.4\n'), []
+    for i, o in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f'{i} 0 obj\n'.encode() + o + b'\nendobj\n'
+    xref = len(out)
+    out += f'xref\n0 {len(objs) + 1}\n0000000000 65535 f \n'.encode() + b''.join(f'{o:010d} 00000 n \n'.encode() for o in offsets)
+    out += f'trailer << /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+    return bytes(out)
+
+
+class JapaneseLibraryTool(unittest.TestCase):
+    """tools/ja_library.py build and install, offline, with files standing in for downloads."""
+
+    def test_build_and_install(self):
+        import ja_library as J
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            entries = [
+                {'id': 'ja-book-1', 'group': 'ja-book', 'part': 1, 'title': '手引き 1', 'document_title': '防災の手引き', 'publisher': '某市',
+                 'url': 'https://example.invalid/a/p1.pdf', 'kind': 'pdf', 'category': 'disaster-response', 'licence': 'CC BY 4.0'},
+                {'id': 'ja-book-2', 'group': 'ja-book', 'part': 2, 'title': '手引き 2', 'publisher': '某市',
+                 'url': 'https://example.invalid/a/p2.pdf', 'kind': 'pdf'},
+                {'id': 'ja-web', 'title': '応急手当のページ', 'publisher': '某庁', 'url': 'https://example.invalid/b/aid', 'kind': 'html',
+                 'category': 'first-aid', 'licence': '個人利用のみ'}]
+            dl = tmp / 'dl'
+            for e, body in [(entries[0], tiny_pdf('first chapter')), (entries[1], tiny_pdf('second chapter'))]:
+                J.local_path(dl, e).parent.mkdir(parents=True, exist_ok=True)
+                J.local_path(dl, e).write_bytes(body)
+            J.local_path(dl, entries[2]).parent.mkdir(parents=True, exist_ok=True)
+            J.local_path(dl, entries[2]).write_text('<html><body><nav>メニュー</nav><main><h2>止血</h2><p>傷口を清潔な布で強く押さえます。</p>'
+                                                    '<script>alert(1)</script></main></body></html>', encoding='utf-8')
+            records, missing = J.build(entries, dl, tmp / 'addon')
+            self.assertEqual(missing, [])
+            by = {r['id']: r for r in records}
+            self.assertEqual(by['ja-book']['pages'], 2)                          # two chapter files, one book
+            self.assertEqual(by['ja-book']['title'], '防災の手引き')
+            page = (tmp / 'addon' / 'library-data' / by['ja-web']['path']).read_text(encoding='utf-8')
+            self.assertIn('傷口を清潔な布で', page)
+            self.assertNotIn('script', page)
+            self.assertNotIn('メニュー', page)
+            self.assertIn('ja-sources', by)
+
+            data = tmp / 'LastbookData'
+            J.install(tmp / 'addon', data)                                      # a new library
+            J.install(tmp / 'addon', data)                                      # again: replaces, never doubles
+            lib = data / 'library-data'
+            cat = json.loads((lib / 'catalog.json').read_text(encoding='utf-8'))
+            self.assertEqual(sorted(r['id'] for r in cat), ['ja-book', 'ja-sources', 'ja-web'])
+            con = sqlite3.connect(lib / 'search.sqlite')
+            self.assertEqual(con.execute("SELECT count(*) FROM pages WHERE doc_id='ja-book'").fetchone()[0], 2)
+            self.assertEqual([d for d, _, _, _ in ja_search.search(con, '止血')], ['ja-web'])
+            con.close()
+
+            other = tmp / 'English'                                             # an existing library keeps its own records
+            (other / 'library-data').mkdir(parents=True)
+            (other / 'library-data' / 'catalog.json').write_text(json.dumps([{'id': 'en-water', 'kind': 'pdf', 'path': 'documents/w.pdf', 'title': 'Water'}]))
+            search_db(str(other / 'library-data' / 'search.sqlite'), japanese=False).close()
+            J.install(tmp / 'addon', other)
+            cat = json.loads((other / 'library-data' / 'catalog.json').read_text(encoding='utf-8'))
+            self.assertIn('en-water', [r['id'] for r in cat])
+            con = sqlite3.connect(other / 'library-data' / 'search.sqlite')
+            self.assertEqual(con.execute("SELECT count(*) FROM pages WHERE pages MATCH 'boil'").fetchone()[0], 1)
+            self.assertIn('ja-web', [d for d, _, _, _ in ja_search.search(con, '止血')])
+            con.close()
 
 
 @unittest.skipUnless(NODE, 'needs Node')

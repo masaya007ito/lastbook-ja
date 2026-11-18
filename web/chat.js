@@ -297,7 +297,7 @@ const Chat = (() => {
         close();
         if (out.includes('<div class="sec-')) out += '</div>';
         section = sec || (head ? 'main' : section);
-        if (sec) { out += `<div class="sec-${sec}"><h4>${sec === 'missing' ? tr('Not found in the library') : sec === 'disagree' ? tr('Sources disagree') : tr('The model’s own reasoning — not from the library')}</h4>`; const rest = t.replace(/^[#*\s]*(not found in the library|sources disagree|my own reasoning \(not from the library\)|my own reasoning|ライブラリに見つからないこと|資料によって異なる点|私自身の推論[（(]ライブラリ外[）)]|私自身の推論)[:：*\s]*/i, ''); if (rest) out += `<p>${inline(rest)}</p>`; continue }
+        if (sec) { out += `<div class="sec-${sec}"><h4>${sec === 'missing' ? tr('Not found in the library') : sec === 'disagree' ? tr('Sources disagree') : tr('The model’s own reasoning — not from the library')}</h4>`; const rest = t.replace(/^[#*\s「『]*(not found in the library|sources disagree|my own reasoning \(not from the library\)|my own reasoning|ライブラリに見つからないこと|資料によって異なる点|私自身の推論[（(]ライブラリ外[）)]|私自身の推論)[:：*\s」』]*/i, ''); if (rest) out += `<p>${inline(rest)}</p>`; continue }
         out += `<h4>${inline(hText.replace(/:$/, ''))}</h4>`; continue;
       }
       const ul = /^[-*•]\s+(.*)$/.exec(t), ol = /^(\d+)[.)]\s+(.*)$/.exec(t);

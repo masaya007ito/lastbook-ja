@@ -38,6 +38,14 @@ def norm(text):
     return unicodedata.normalize('NFKC', text or '').lower()
 
 
+# A line break between two Japanese characters is where a PDF wrapped a line, not a word boundary (ひ/とり is ひとり).
+WRAP = re.compile(r'(?<=[ぁ-ゟ゠-ヺー-ヿ々〆㐀-䶿一-鿿豈-﫿])[ \t\u3000]*\n[ \t\u3000]*(?=[ぁ-ゟ゠-ヺー-ヿ々〆㐀-䶿一-鿿豈-﫿])')
+
+
+def unwrap(text):
+    return WRAP.sub('', text)
+
+
 def has_japanese(text):
     return bool(RUN.search(norm(text)))
 
@@ -48,7 +56,7 @@ def _pieces(run):
 
 def grams(text):
     """Text as the pages_ja table stores it: Japanese runs as two-character pieces, everything else as it was."""
-    text = norm(text)
+    text = unwrap(norm(text))
     out, at = [], 0
     for m in RUN.finditer(text):
         out.append(text[at:m.start()])
@@ -112,7 +120,7 @@ def present(con):
 
 def snippet(body, ws, mark=('', ''), before=30, after=70):
     """A window of the original text around the first search word, with the words marked."""
-    body = re.sub(r'\s+', ' ', norm(body)).strip()
+    body = re.sub(r'\s+', ' ', unwrap(norm(body))).strip()
     spots = [body.find(w) for w in ws if body.find(w) >= 0]
     at = min(spots) if spots else 0
     lo, hi = max(0, at - before), min(len(body), at + after)

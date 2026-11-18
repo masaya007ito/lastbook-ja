@@ -20,7 +20,7 @@ cmake -S "$L" -B "$B" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DLLAMA
   -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_NATIVE=OFF -DGGML_CCACHE=OFF \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DCMAKE_OSX_ARCHITECTURES=arm64 \
   -DCMAKE_C_FLAGS="$MAP" -DCMAKE_CXX_FLAGS="$MAP" -DCMAKE_OBJC_FLAGS="$MAP" > "$W/cmake-mac.log"
-cmake --build "$B" -j "$(sysctl -n hw.ncpu)" --target llama > "$W/build-mac.log"
+cmake --build "$B" -j "$(sysctl -n hw.ncpu)" --target llama vendor-hash > "$W/build-mac.log"   # vendor-hash: linked below, not a dependency of llama
 clang++ -std=c++17 -O2 -DNDEBUG $MAP -mmacosx-version-min=14.0 -arch arm64 \
   -I"$L/include" -I"$L/ggml/include" -I"$L/common" -I"$L/vendor" -I"$L/src" \
   "$HERE/lastbook_llm.cpp" "$L/common/fit.cpp" "$L/common/log.cpp" "$L/common/json.cpp" \

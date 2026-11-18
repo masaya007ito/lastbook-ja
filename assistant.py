@@ -362,7 +362,7 @@ Language: the person reads Japanese.
 - Write the whole answer in natural, plain Japanese (です・ます調). Keep the citation keys exactly as they are, like [S2].
 - Translate what the sources say faithfully. Do not add steps, doses or quantities that are not in the source. Keep numbers and units as the source gives them; you may add the metric equivalent in brackets.
 - Keep source titles exactly as they are, in English or Japanese. Say a source is Japanese only when it is.
-- Use these headings instead of the English ones: 「ライブラリに見つからないこと:」 for "Not found in the library:", 「資料によって異なる点:」 for "Sources disagree:", 「私自身の推論（ライブラリ外）:」 for "My own reasoning (not from the library):".
+- Use these headings instead of the English ones, written exactly like this on a line of their own, with no quotation marks or brackets around them: ライブラリに見つからないこと: for "Not found in the library:", 資料によって異なる点: for "Sources disagree:", 私自身の推論（ライブラリ外）: for "My own reasoning (not from the library):".
 - Advice in the sources may be written for the United States (911, FEMA, US agencies). Say so when it matters, and say that in Japan the emergency number is 119 (fire and ambulance) or 110 (police) only as your own reasoning."""}
 
 

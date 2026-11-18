@@ -849,13 +849,23 @@ function lookOf(fd) {
 const ZIMS = [['mdwiki_en_all_maxi_2025-11.zim', tr('Medical encyclopedia'), tr('MDWiki: plain-language articles on conditions, medicines and first aid.'), 'health'],
 ['wikibooks_en_all_maxi_2026-04.zim', 'Wikibooks', tr('Open textbooks and how-to manuals, from cooking to electronics.'), 'book'],
 ['appropedia_en_all_maxi_2026-02.zim', 'Appropedia', tr('Appropriate technology: water, sanitation, energy and building projects.'), 'repair'],
-['wikipedia_en_all_nopic_2026-06.zim', 'Wikipedia', tr('The full English encyclopedia, text only (no pictures).'), 'wiki']];
-const zimsHere = async () => { const here = (await libInfo()).zims; return here ? ZIMS.filter(z => here.includes(z[0])) : ZIMS };
+['wikipedia_en_all_nopic_2026-06.zim', 'Wikipedia', tr('The full English encyclopedia, text only (no pictures).'), 'wiki'],
+// Japanese encyclopedias, matched by the start of the file name so a newer dated file still shows.
+['wikipedia_ja_medicine_', tr('Japanese medical encyclopedia'), tr('Japanese Wikipedia: articles on medicine, first aid and health.'), 'health', true],
+['wikibooks_ja_all_', tr('Japanese Wikibooks'), tr('Open textbooks and how-to manuals in Japanese.'), 'book', true],
+['wikipedia_ja_top_', tr('Japanese Wikipedia (main articles)'), tr('The most-read Japanese Wikipedia articles, text only.'), 'wiki', true],
+['wikipedia_ja_all_', tr('Japanese Wikipedia'), tr('The full Japanese encyclopedia.'), 'wiki', true],
+['wikivoyage_ja_all_', tr('Japanese Wikivoyage'), tr('Places and travel information in Japanese.'), 'map', true]];
+const zimsHere = async () => {
+  const here = (await libInfo()).zims;
+  if (!here) return ZIMS.filter(z => !z[4]);
+  return ZIMS.map(z => { const f = z[4] ? here.filter(h => h.startsWith(z[0])).sort().pop() : here.includes(z[0]) && z[0]; return f ? [f, ...z.slice(1, 4)] : null }).filter(Boolean);
+};
 async function encyclopedias(q) {
   setTitle(tr('Encyclopedias'));
   const zims = await zimsHere();
   if (!zims.length) { main.innerHTML = `<h1>${tr('Encyclopedias')}</h1><p class="lead">${tr('This download has no encyclopedias.')}</p>`; return }
-  const count = ['', tr('One complete encyclopedia'), tr('Two complete encyclopedias'), tr('Three complete encyclopedias'), tr('Four complete encyclopedias')][zims.length];
+  const count = ['', tr('One complete encyclopedia'), tr('Two complete encyclopedias'), tr('Three complete encyclopedias'), tr('Four complete encyclopedias')][zims.length] || tr('{n} complete encyclopedias', { n: zims.length });
   main.innerHTML = `<h1>${tr('Encyclopedias')}</h1><p class="lead">${tr('{count}. Community-written: good for background — use the guides’ manuals for safety-critical steps.', { count })}</p>
   <div style="margin:16px 0">${searchBox('zq', q, tr('e.g. tetanus, solar panel, sourdough'))}</div><div id="zres"></div>
   ${secHead(tr('Open one'))}<div class="cards2">${zims.map(z => `<a class="card" href="#/wiki/${z[0]}/?from=${encodeURIComponent('#/encyclopedias')}"><span class="ico">${ico(z[3])}</span><b>${esc(z[1])}</b><small>${esc(z[2])}</small></a>`).join('')}</div>`;
