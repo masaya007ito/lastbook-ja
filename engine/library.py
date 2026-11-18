@@ -234,9 +234,10 @@ def rewrite_links(records):
   if changed:path.write_text(str(s),encoding='utf-8');count+=1
  print(f'Linked {count} archived pages to local references',flush=True)
 
-def zim_hits(arc,q,Searcher,Query,n=8):
+def zim_hits(arc,q,Searcher,Query,n=8,leads=None):
  """Encyclopedia entries for q. A Japanese question is searched by its words (水を煮沸する方法 -> 煮沸 水), and an article
- titled exactly as one of the words comes first; redirects are followed so one article is listed once."""
+ titled exactly as the whole question, or else as one of its words, comes first; redirects are followed so one article
+ is listed once. leads, when given, collects the paths of those title matches."""
  try:
   from engine import ja_search
   words=ja_search.words(q)
@@ -245,13 +246,19 @@ def zim_hits(arc,q,Searcher,Query,n=8):
  if words:
   from libzim.suggestion import SuggestionSearcher
   ss=SuggestionSearcher(arc)
-  for w in words:
-   paths+=[p for p in ss.suggest(w).getResults(0,5) if ja_search.norm(arc.get_entry_by_path(p).title)==w]
+  exact=lambda w:[p for p in ss.suggest(w).getResults(0,5) if ja_search.norm(arc.get_entry_by_path(p).title)==w]
+  # Only when no article is titled as the whole question (関ヶ原の戦い) do the words' own articles lead: longest first and
+  # never a single character, so fragments such as 原 or 南海 do not push the real article down.
+  paths=exact(ja_search.norm(q).strip())
+  if not paths:
+   for w in sorted((w for w in words if len(w)>1),key=len,reverse=True):paths+=exact(w)
+ first=len(paths)
  paths+=list(Searcher(arc).search(Query().set_query(' '.join(words) if words else q)).getResults(0,n))
  out,seen=[],set()
- for p in paths:
+ for i,p in enumerate(paths):
   e=arc.get_entry_by_path(p)
   while e.is_redirect:e=e.get_redirect_entry()
+  if leads is not None and i<first:leads.add(e.path)
   if e.path not in seen:seen.add(e.path);out.append(e)
  return out[:n]
 
@@ -371,8 +378,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
        if path.name not in ZIMS:ZIMS[path.name]=Archive(path)
        arc=ZIMS[path.name]
       if not arc.has_fulltext_index:continue
-      for entry in zim_hits(arc,q,Searcher,Query):
-       hits.append({'title':entry.title,'collection':path.stem,'path':'zim/'+urllib.parse.quote(path.name)+'/'+urllib.parse.quote(entry.path,safe='/')})
+      leads=set()
+      for entry in zim_hits(arc,q,Searcher,Query,leads=leads):
+       hits.append({'title':entry.title,'collection':path.stem,'path':'zim/'+urllib.parse.quote(path.name)+'/'+urllib.parse.quote(entry.path,safe='/')}|({'lead':True} if entry.path in leads else {}))
      except Exception as e:  # one damaged file must not cost the answers from the others
       failed+=1;print(f'collection search skipped {path.name}: {type(e).__name__}',flush=True)
     if tried and failed==tried:raise ValueError('no collection could be searched')

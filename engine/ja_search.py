@@ -18,7 +18,8 @@ from engine import ja_terms
 TABLE = 'pages_ja'
 # Hiragana, katakana (not the middle dot ・), the prolonged sound mark, 々 〆, CJK ideographs and compatibility ideographs.
 RUN = re.compile(r'[ぁ-ゟ゠-ヺー-ヿ々〆㐀-䶿一-鿿豈-﫿]+')
-SCRIPT = re.compile(r'[ぁ-ゟ]+|[゠-ヺー-ヿ]+|[々〆㐀-䶿一-鿿豈-﫿]+')
+# The small ヵ ヶ count as kanji, as in place names (関ヶ原, 霞ヶ浦), so they never cut a kanji word in two.
+SCRIPT = re.compile(r'[ぁ-ゟ]+|[゠-ヴヷ-ヺー-ヿ]+|[ヵヶ々〆㐀-䶿一-鿿豈-﫿]+')
 HIRAGANA = re.compile(r'[ぁ-ゟ]+')
 LATIN = re.compile(r'[0-9a-z]+(?:[.-][0-9a-z]+)*')
 # Words a question is built from that say nothing about the subject.

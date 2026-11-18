@@ -687,7 +687,7 @@ async function reader(id, page, from, view) {
 }
 
 /* --------------------------------------------------------------- wiki -- */
-const ZIMNAMES = { mdwiki: tr('Medical encyclopedia (MDWiki)'), wikipedia: tr('Wikipedia (text only)'), wikibooks: tr('Wikibooks — how-to textbooks'), appropedia: tr('Appropedia — appropriate technology') };
+const ZIMNAMES = { mdwiki: tr('Medical encyclopedia (MDWiki)'), wikipedia_ja_medicine: tr('Japanese medical encyclopedia'), wikipedia_ja: tr('Japanese Wikipedia'), wikibooks_ja: tr('Japanese Wikibooks'), wikivoyage_ja: tr('Japanese Wikivoyage'), wikipedia: tr('Wikipedia (text only)'), wikibooks: tr('Wikibooks — how-to textbooks'), appropedia: tr('Appropedia — appropriate technology') };
 const zimLabel = name => { for (const k in ZIMNAMES) if (name.startsWith(k)) return ZIMNAMES[k]; return name };
 async function wiki(path, from, y) {
   const [zim, ...rest] = path.split('/');
@@ -878,9 +878,15 @@ async function zimResults(q, el, max = 8, heading = '') {
   try {
     const hits = await api('/api/collection-search?q=' + encodeURIComponent(q));
     if (!hits.length) { el.innerHTML = heading ? '' : `<div class="empty"><span class="e-ico">${ico('wiki')}</span><b>${tr('No articles found')}</b><p>${tr('Try another word for the same thing.')}</p></div>`; return false }
-    const ord = ['mdwiki', 'wikibooks', 'appropedia', 'wikipedia'];
-    hits.sort((a, b) => ord.findIndex(k => a.collection.startsWith(k)) - ord.findIndex(k => b.collection.startsWith(k)));
-    el.innerHTML = `${heading ? `<h2>${heading}</h2>` : ''}<ul class="list">${hits.slice(0, max).map(h => `<li><a class="row" href="#/wiki/${esc(h.path.replace(/^zim\//, ''))}?${fromQ()}"><span class="k">${ico('wiki')}</span><span><b>${esc(h.title)}</b><small>${esc(zimLabel(h.collection))}</small></span></a></li>`).join('')}</ul>`;
+    // An article titled as the question (lead, Japanese questions only) comes first; a Japanese question then reads the
+    // Japanese collections before the English ones; then by collection, travel guides last. The full Japanese Wikipedia
+    // holds every article of the Japanese medical one, so it goes first and a title is listed once.
+    const ord = ['mdwiki', 'wikipedia_ja_all', 'wikipedia_ja_medicine', 'wikibooks', 'appropedia', 'wikipedia', 'wikivoyage'];
+    const ja = /[぀-ヿ㐀-鿿]/.test(q);
+    const rank = h => (h.lead ? 0 : 100) + (ja && !h.collection.includes('_ja_') ? 50 : 0) + ((i => i < 0 ? ord.length : i)(ord.findIndex(k => h.collection.startsWith(k))));
+    const seen = new Set();
+    const shown = hits.sort((a, b) => rank(a) - rank(b)).filter(h => !h.collection.startsWith('wikipedia_ja') || (!seen.has(h.title) && seen.add(h.title)));
+    el.innerHTML = `${heading ? `<h2>${heading}</h2>` : ''}<ul class="list">${shown.slice(0, max).map(h => `<li><a class="row" href="#/wiki/${esc(h.path.replace(/^zim\//, ''))}?${fromQ()}"><span class="k">${ico('wiki')}</span><span><b>${esc(h.title)}</b><small>${esc(zimLabel(h.collection))}</small></span></a></li>`).join('')}</ul>`;
     return true;
   } catch (e) { el.innerHTML = heading ? '' : `<p class="muted">${tr('Encyclopedia search isn’t available right now ({reason}).', { reason: esc(e.message) })}</p>`; return false }
 }

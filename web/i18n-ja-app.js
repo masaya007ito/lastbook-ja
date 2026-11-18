@@ -208,7 +208,7 @@ lbWords('ja', {
   'Three complete encyclopedias': '百科事典 3つ（全文収録）',
   'Four complete encyclopedias': '百科事典 4つ（全文収録）',
   '{count}. Community-written: good for background — use the guides’ manuals for safety-critical steps.': '{count}。コミュニティが書いたもので、背景を知るのに向いています。安全にかかわる手順は、ガイドのマニュアルを使ってください。',
-  'e.g. tetanus, solar panel, sourdough': '例：tetanus, solar panel, sourdough',
+  'e.g. tetanus, solar panel, sourdough': '例：破傷風、太陽光発電、tetanus',
   'Open one': 'ひとつ開く',
   'Searching the encyclopedias…': '百科事典を検索しています…',
   'No articles found': '記事が見つかりません',

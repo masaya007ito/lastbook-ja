@@ -207,6 +207,47 @@ class EncyclopediaSearch(unittest.TestCase):
             library.zim_hits(Arc(), 'burn first aid', Searcher, Query)
             self.assertEqual(asked, ['burn first aid'])        # English goes to the encyclopedia as it was typed
 
+    def test_an_article_titled_as_the_whole_question_beats_its_fragments(self):
+        from engine import library, ja_search
+        self.assertEqual(ja_search.words('関ヶ原の戦い'), ['関ヶ原', '戦'])   # ヶ does not cut the place name
+        titles = ['関ヶ原の戦い', '関ヶ原', '戦', '南海', 'トラフ', '地震', '全文の記事']
+        entries = {'A/' + t: Entry('A/' + t, t) for t in titles}
+
+        class Arc:
+            def get_entry_by_path(self, p):
+                return entries[p]
+
+        class Query:
+            def set_query(self, q):
+                return self
+
+        class Results:
+            def __init__(self, paths):
+                self.paths = paths
+
+            def getResults(self, start, n):
+                return self.paths[start:start + n]
+
+        class Searcher:
+            def __init__(self, arc):
+                pass
+
+            def search(self, query):
+                return Results(['A/全文の記事'])
+
+        class Suggest:
+            def __init__(self, arc):
+                pass
+
+            def suggest(self, w):
+                return Results(['A/' + t for t in titles if t.startswith(w)])
+
+        with patch('libzim.suggestion.SuggestionSearcher', Suggest):
+            got = [e.title for e in library.zim_hits(Arc(), '関ヶ原の戦い', Searcher, Query)]
+            self.assertEqual(got, ['関ヶ原の戦い', '全文の記事'])        # the fragments 関ヶ原 and 戦 are not listed
+            got = [e.title for e in library.zim_hits(Arc(), '南海トラフ地震', Searcher, Query)]
+            self.assertEqual(got, ['トラフ', '地震', '南海', '全文の記事'])  # no whole title: words, longest first
+
 
 def tiny_pdf(text):
     """A one-page PDF whose text layer is text (ASCII)."""
