@@ -33,7 +33,7 @@ if __name__ == '__main__':  # --data must be known before the paths below are wo
 
 import engine.paths as lastbook_paths  # noqa: E402  (data folder and program folder can differ in the packaged app)
 from engine.paths import ro_uri  # noqa: E402
-from engine import saved_pages, address_search, ja_terms  # noqa: E402
+from engine import saved_pages, address_search, ja_terms, ja_search  # noqa: E402
 from engine.setup import api as setup_api  # noqa: E402  (the one module that may download: only when the person asks)
 HERE = lastbook_paths.DATA  # holds derived/
 APP = lastbook_paths.APP  # holds web/ and content/
@@ -310,6 +310,7 @@ SYN = {
 }
 CLINICAL = re.compile(r'surg|clinical|district hospital|essential drugs|tuberculosis|obstetric|cholera epidemic|measles epidemic|anaesth|war surgery', re.I)
 GENERAL = re.compile(r'first aid|emergency|basic|household|home|beginner|guide|handbook|where there is no', re.I)
+JA_FIRST = 2.0  # a Japanese question found in a Japanese source: lean to the source the person can read
 KIND_FILTERS = {'read': ('pdf', 'html', 'pptx'), 'video': ('video', 'transcript'), 'all': None}
 
 
@@ -352,23 +353,35 @@ def query_groups(q):
     return content, groups
 
 
+def scaled(rows):
+    """bm25 scores (lower is better) divided by the best one, so the best row scores -1."""
+    best = min((r[3] for r in rows), default=0)
+    return [(d, p, snip, score / -best) for d, p, snip, score in rows] if best < 0 else rows
+
+
 @functools.lru_cache(maxsize=256)
 def find(q, kind='all', limit=30):
-    content, groups = query_groups(ja_terms.to_english(q))   # the library is English: Japanese words become its words
-    if not groups:
+    content, groups = query_groups(ja_terms.to_english(q))   # most of the library is English: Japanese words become its words
+    ja_words = ja_search.words(q)   # and Japanese sources are searched with the Japanese words themselves
+    if not groups and not ja_words:
         return {'q': q, 'results': [], 'expanded': []}
     con = sqlite3.connect(ro_uri(library.DB), uri=True)
     sql = ("SELECT doc_id,page,snippet(pages,6,'\u0001','\u0002',' … ',28),bm25(pages,0,6,1,1,0,0,1) "
            "FROM pages WHERE pages MATCH ? ORDER BY bm25(pages,0,6,1,1,0,0,1) LIMIT 600")
     rows, mode = [], 'all words'
     try:
-        rows = con.execute(sql, (fts_expr(groups),)).fetchall()
-        if len(rows) < 8 and len(groups) > 1:
-            # relax: any of the ideas, rank documents that have more of them higher
-            mode = 'some words'
-            rows += con.execute(sql, (' OR '.join('(' + fts_expr([g]) + ')' for g in groups),)).fetchall()
+        if groups:
+            rows = con.execute(sql, (fts_expr(groups),)).fetchall()
+            if len(rows) < 8 and len(groups) > 1:
+                # relax: any of the ideas, rank documents that have more of them higher
+                mode = 'some words'
+                rows += con.execute(sql, (' OR '.join('(' + fts_expr([g]) + ')' for g in groups),)).fetchall()
     except sqlite3.OperationalError:
         rows = []
+    ja_rows = ja_search.search(con, q, 600, ('\u0001', '\u0002')) if ja_words else []
+    ja_docs = {d for d, _, _, _ in ja_rows}
+    if ja_rows:   # the two indexes score on different scales: put each on its own best = 1 before they meet
+        rows = scaled(rows) + scaled(ja_rows)
     con.close()
     cat = catalog()['by_id']
     docs = {}
@@ -393,14 +406,17 @@ def find(q, kind='all', limit=30):
             d['score'] = -score
         elif d['n'] <= 4:
             d['score'] += -score * 0.1  # a little credit for a few more matching pages, not for sheer length
-    title_words = set(w for g in groups for w in g)
     out = []
     for d in docs.values():
         r = d['r']
         t, w = trust(r)
         title = r['title'].lower()
-        tb = sum(1 for g in groups if any(x in title for x in g)) / len(groups)
+        tb = sum(1 for g in groups if any(x in title for x in g)) / len(groups) if groups else 0
+        if r['id'] in ja_docs:
+            tb = max(tb, sum(1 for x in ja_words if x in ja_search.norm(r['title'])) / len(ja_words))
         s = d['score'] * w * (1 + tb)
+        if r['id'] in ja_docs:
+            s *= JA_FIRST
         if re.search(r'Spanish|español|\bkit de\b', r['title'] + r.get('notes', ''), re.I):
             s *= 0.5
         if CLINICAL.search(r['title'] + ' ' + r.get('collection', '')) and not CLINICAL.search(q):

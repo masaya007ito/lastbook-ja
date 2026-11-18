@@ -207,6 +207,9 @@ def build():
     if body.strip():con.execute('INSERT INTO pages VALUES (?,?,?,?,?,?,?)',(r['id'],r['title'],r['collection'],r['category'],r['path'],page,body))
    totalpages+=len(pages)
    if i%100==0:print(f'Indexed {i+1}/{len(records)} resources',flush=True)
+ try:
+  from engine import ja_search;print(f'{ja_search.build(con)} Japanese rows indexed for Japanese search',flush=True)  # rows with Japanese text get a second, Japanese-readable index
+ except ImportError:pass
  con.commit();con.close();building.replace(DB)
  (ROOT/'catalog.json').write_text(json.dumps(built,indent=2),encoding='utf-8')
  summary={'resources':len(built),'pdfs':sum(r['kind']=='pdf' for r in built),'pdf_pages':sum(r.get('pages') or 0 for r in built),'web_pages':sum(r['kind'] in ['html','htm'] for r in built),'videos':sum(r['kind'] in ['video','mp4','webm','mkv'] for r in built),'collections':sum(r['kind']=='zim' for r in built),'document_bytes':sum(r['bytes'] for r in built),'indexed_units':totalpages,'categories':dict(collections.Counter(r['category'] for r in built)),'extraction_errors':errors,'missing_files':bad,'image_only_pdfs':[r['path'] for r in built if (r.get('searchability') or '').startswith('image-only')]}
@@ -230,6 +233,27 @@ def rewrite_links(records):
     a['href']=os.path.relpath(ROOT/target,path.parent)+('#'+fragment if fragment else '');changed=True
   if changed:path.write_text(str(s),encoding='utf-8');count+=1
  print(f'Linked {count} archived pages to local references',flush=True)
+
+def zim_hits(arc,q,Searcher,Query,n=8):
+ """Encyclopedia entries for q. A Japanese question is searched by its words (水を煮沸する方法 -> 煮沸 水), and an article
+ titled exactly as one of the words comes first; redirects are followed so one article is listed once."""
+ try:
+  from engine import ja_search
+  words=ja_search.words(q)
+ except ImportError:ja_search,words=None,[]
+ paths=[]
+ if words:
+  from libzim.suggestion import SuggestionSearcher
+  ss=SuggestionSearcher(arc)
+  for w in words:
+   paths+=[p for p in ss.suggest(w).getResults(0,5) if ja_search.norm(arc.get_entry_by_path(p).title)==w]
+ paths+=list(Searcher(arc).search(Query().set_query(' '.join(words) if words else q)).getResults(0,n))
+ out,seen=[],set()
+ for p in paths:
+  e=arc.get_entry_by_path(p)
+  while e.is_redirect:e=e.get_redirect_entry()
+  if e.path not in seen:seen.add(e.path);out.append(e)
+ return out[:n]
 
 def search(query,limit=25):
  terms=re.findall(r'[\w-]+',query,flags=re.UNICODE)
@@ -347,10 +371,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
        if path.name not in ZIMS:ZIMS[path.name]=Archive(path)
        arc=ZIMS[path.name]
       if not arc.has_fulltext_index:continue
-      result=Searcher(arc).search(Query().set_query(q))
-      for p in result.getResults(0,8):
-       entry=arc.get_entry_by_path(p)
-       hits.append({'title':entry.title,'collection':path.stem,'path':'zim/'+urllib.parse.quote(path.name)+'/'+urllib.parse.quote(p,safe='/')})
+      for entry in zim_hits(arc,q,Searcher,Query):
+       hits.append({'title':entry.title,'collection':path.stem,'path':'zim/'+urllib.parse.quote(path.name)+'/'+urllib.parse.quote(entry.path,safe='/')})
      except Exception as e:  # one damaged file must not cost the answers from the others
       failed+=1;print(f'collection search skipped {path.name}: {type(e).__name__}',flush=True)
     if tried and failed==tried:raise ValueError('no collection could be searched')

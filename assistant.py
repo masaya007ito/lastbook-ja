@@ -7,7 +7,7 @@ gazetteer) and nothing else: no file paths, URLs or shell input are accepted fro
 import base64, json, re, socket, sqlite3, threading, time, urllib.error, urllib.request
 import retrieval
 from engine.paths import ro_uri
-from engine import ja_terms
+from engine import ja_terms, ja_search
 
 import os
 LOOPBACK = re.compile(r'http://(127\.0\.0\.1|\[::1\]):\d+(/[^\s]*)?')
@@ -115,7 +115,8 @@ def _allowed(kind):
 
 def hybrid(q, k=8, kind='any', doc=None):
     """Best passages for q from keyword and meaning-based search, fused, with provenance."""
-    q = ja_terms.to_english(q) or q   # the library is English; a Japanese question searches with English words
+    q_ja = q   # Japanese sources are searched with the Japanese words themselves
+    q = ja_terms.to_english(q) or q   # most of the library is English; a Japanese question searches with English words
     cat = S.catalog()
     allowed = _allowed(kind)
     if doc:
@@ -133,12 +134,24 @@ def hybrid(q, k=8, kind='any', doc=None):
         if not allowed(doc_id):
             continue
         kw.append((doc_id, page if cat['by_id'][doc_id]['kind'] == 'pdf' else None, None, snip))
+    kw_ja = []
+    if ja_search.words(q_ja):
+        con = sqlite3.connect(ro_uri(S.library.DB), uri=True)
+        try:
+            for doc_id, page, snip, _ in ja_search.search(con, q_ja, 120):
+                if doc_id in cat['by_id'] and allowed(doc_id):
+                    kw_ja.append((doc_id, page if cat['by_id'][doc_id]['kind'] == 'pdf' else None, None, snip))
+        finally:
+            con.close()
     sem = INDEX.semantic(q, 80, allowed) if INDEX else []
     sem_l = [(s['doc_id'], s['page'] if cat['by_id'][s['doc_id']]['kind'] == 'pdf' else None, s['t'], s['text'], s['sem']) for s in sem]
     key = lambda d, p, t: (d, p, None if t is None else int(t // 45))
     qwords = [w for w in re.findall(r'[a-z0-9-]{3,}', q.lower()) if w not in S.STOP]
     models = [w for w in re.findall(r'[a-z0-9-]+', q.lower()) if re.search(r'\d', w) and re.search(r'[a-z]', w) and len(w) >= 3]
     lists = [('keyword', [key(*x[:3]) for x in kw]), ('meaning', [key(*x[:3]) for x in sem_l])]
+    if kw_ja:
+        lists.append(('keyword-ja', [key(*x[:3]) for x in kw_ja]))
+        kw = kw + kw_ja
     fused = retrieval.rrf(lists)
     text = {}
     for d, p, t, snip in kw:
@@ -153,6 +166,8 @@ def hybrid(q, k=8, kind='any', doc=None):
         r = cat['by_id'][d]
         _, weight = S.trust(r)
         score = e['score'] * (0.75 + 0.25 * weight)
+        if 'keyword-ja' in e['ranks']:
+            score *= S.JA_FIRST   # found in a Japanese source by the Japanese words: the source the person can read
         if S.CLINICAL.search(r['title'] + ' ' + r.get('collection', '')) and not S.CLINICAL.search(q):
             score *= 0.55  # surgery/clinician texts after general guidance unless asked for
         title = (r['title'] + ' ' + str(r.get('model') or '')).lower()
@@ -343,10 +358,10 @@ Keep answers short and calm. Use simple markdown: **bold**, numbered or bulleted
 # Added for a person reading the interface in Japanese. The library stays English, so searches stay English.
 LANG_RULES = {'ja': """
 Language: the person reads Japanese.
-- The library is in English. Always call search_library with English words (translate the question's key terms first). The initial search results you are given may be weak for a Japanese question; if so, search again in English.
+- Most of the library is in English; some sources are in Japanese. Call search_library with English words (translate the question's key terms first). When the question is about Japan or the first results include Japanese sources, also search with Japanese words. The initial search results you are given may be weak for a Japanese question; if so, search again.
 - Write the whole answer in natural, plain Japanese (です・ます調). Keep the citation keys exactly as they are, like [S2].
 - Translate what the sources say faithfully. Do not add steps, doses or quantities that are not in the source. Keep numbers and units as the source gives them; you may add the metric equivalent in brackets.
-- Source titles stay in English. Do not say the sources are Japanese.
+- Keep source titles exactly as they are, in English or Japanese. Say a source is Japanese only when it is.
 - Use these headings instead of the English ones: 「ライブラリに見つからないこと:」 for "Not found in the library:", 「資料によって異なる点:」 for "Sources disagree:", 「私自身の推論（ライブラリ外）:」 for "My own reasoning (not from the library):".
 - Advice in the sources may be written for the United States (911, FEMA, US agencies). Say so when it matters, and say that in Japan the emergency number is 119 (fire and ambulance) or 110 (police) only as your own reasoning."""}
 

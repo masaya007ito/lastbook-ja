@@ -28,7 +28,7 @@ TERMS = {
     '回復体位': 'recovery position', 'ショック': 'shock', '熱中症': 'heat stroke', '低体温症': 'hypothermia', '低体温': 'hypothermia',
     '凍傷': 'frostbite', '発熱': 'fever', '熱': 'fever', '下痢': 'diarrhea', '脱水': 'dehydration', '嘔吐': 'vomiting', '吐き気': 'nausea',
     '感染症': 'infection', '感染': 'infection', '化膿': 'infection', 'アレルギー': 'allergic', 'アナフィラキシー': 'anaphylaxis',
-    '噛まれた': 'bite', '咬傷': 'bite', '蛇': 'snake', 'ヘビ': 'snake', '虫刺され': 'sting', '蜂': 'bee sting', 'ハチ': 'bee sting',
+    '噛まれた': 'bite', '咬傷': 'bite', '蛇': 'snake', 'ヘビ': 'snake', '虫刺され': 'sting', '刺された': 'sting', '刺され': 'sting', '蜂': 'bee sting', 'ハチ': 'bee sting',
     '薬': 'medicine', '鎮痛剤': 'painkiller', '痛み止め': 'painkiller', '抗生物質': 'antibiotics', '包帯': 'bandage', '添え木': 'splint',
     '歯': 'teeth', '妊娠': 'pregnant', '出産': 'birth', '赤ちゃん': 'baby', '乳児': 'infant', '子ども': 'child', '子供': 'child',
     '高齢者': 'elderly', 'お年寄り': 'elderly', 'ストレス': 'stress', '不安': 'anxiety', 'うつ': 'depression', '病気': 'illness',
