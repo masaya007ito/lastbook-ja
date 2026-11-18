@@ -281,6 +281,38 @@ class JapaneseLibraryTool(unittest.TestCase):
             con.close()
 
 
+class JapanesePagesInGuides(unittest.TestCase):
+    def test_japanese_pages_come_first_and_only_when_held(self):
+        import server
+        item = {'doc': 'ja-manual', 'page': 4, 'label': 'やけどは流水で冷やす', 'note': '流水で冷やす手順です。'}
+        gone = {'doc': 'ja-not-here', 'page': 1, 'label': 'ない資料', 'note': 'この書庫にはありません。'}
+        with tempfile.TemporaryDirectory() as tmp:
+            lib = Path(tmp)
+            (lib / 'catalog.json').write_text(json.dumps([{'id': 'ja-manual', 'kind': 'pdf', 'path': 'documents/ja/m.pdf', 'title': '市民防災マニュアル'}]), encoding='utf-8')
+            with patch.object(server, 'LIB', lib), patch.dict(server._cat, {'mtime': None}), \
+                    patch.object(server, 'local_reads', lambda lang: {'hurt': {'choices': {'burn': [item, gone]}}} if lang == 'ja' else {}):
+                burn = lambda lang: next((c for t in server.topics_resolved(lang) if t['id'] == 'hurt' for c in t['choices'] if c['id'] == 'burn'), {'read': []})
+                self.assertEqual([i.get('doc') for i in burn('ja')['read']][:1], ['ja-manual'])     # first, and the absent one dropped
+                self.assertNotIn('ja-not-here', [i.get('doc') for i in burn('ja')['read']])
+                self.assertNotIn('ja-manual', [i.get('doc') for i in burn('en')['read']])          # English guides as they were
+
+    def test_the_page_list_points_at_real_places(self):
+        import check_ja_local
+        f = ROOT / 'content' / 'local-ja.json'
+        if not f.exists():
+            self.skipTest('no content/local-ja.json yet')
+        probs, _ = check_ja_local.check(json.loads(f.read_text(encoding='utf-8')))
+        self.assertEqual(probs, [])
+
+    def test_checker_catches_a_wrong_place(self):
+        import check_ja_local
+        bad = {'topics': {'hurt': {'choices': {'nope': [{'doc': 'x', 'page': 1, 'label': 'ラベル', 'note': 'ノート'}],
+                                               'burn': [{'doc': 'x', 'page': 0, 'label': 'ラベル', 'note': 'ノート'}]}},
+                          'nowhere': {}}}
+        probs, _ = check_ja_local.check(bad)
+        self.assertEqual(len(probs), 3)
+
+
 @unittest.skipUnless(NODE, 'needs Node')
 class Interface(unittest.TestCase):
     def test_tr_falls_back_and_fills(self):

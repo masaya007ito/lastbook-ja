@@ -230,6 +230,17 @@ def resolve_item(i):
     return i
 
 
+def local_reads(lang):
+    """Pages of sources in this language, read first in a guide: content/local-<lang>.json, {topic: {choices: {choice id:
+    [items]}, route: {...}, prepare: [items], learn: [items]}}. A source this library does not hold is left out, as any is."""
+    if lang == 'en':
+        return {}
+    try:
+        return json.loads((APP / 'content' / f'local-{lang}.json').read_text(encoding='utf-8')).get('topics', {})
+    except (OSError, ValueError):
+        return {}
+
+
 def topics_resolved(lang='en'):
     res = []
     try:
@@ -242,6 +253,7 @@ def topics_resolved(lang='en'):
         except (OSError, ValueError):
             pass
     zims = zim_names()
+    local = local_reads(lang)
 
     def here(items):
         return [resolve_item(i) for i in items if item_here(i, zims)]
@@ -252,12 +264,13 @@ def topics_resolved(lang='en'):
     for t in topics(lang):
         t = dict(t)
         t['gaps'] = gaps.get(t['id'], {})
+        loc = local.get(t['id'], {})
         for k in ('prepare', 'learn'):
-            t[k] = here(t.get(k, []))
+            t[k] = here(loc.get(k, []) + t.get(k, []))
         # A warning stands without its source. It only loses the citation that would open nothing.
         t['limits'] = [resolve_item(i) if item_here(i, zims) else {'text': i.get('text')} for i in t.get('limits', [])]
         for k in ('choices', 'route'):
-            steps = [dict(c, read=here(c.get('read', [])), had=bool(c.get('read'))) for c in t.get(k, [])]
+            steps = [dict(c, read=here(loc.get(k, {}).get(c.get('id'), []) + c.get('read', [])), had=bool(c.get('read'))) for c in t.get(k, [])]
             t[k] = [{a: b for a, b in c.items() if a != 'had'} for c in steps if still_useful(c)]
         res.append(t)
     return res
