@@ -5,6 +5,7 @@
     python3 tools/ja_library.py build   --downloads DIR --out ADDON     # one PDF per document, text, search, catalog
     python3 tools/ja_library.py install --addon ADDON --data DATA       # into a LastbookData folder (made if absent)
     python3 tools/ja_library.py ocr     --addon ADDON --downloads DIR   # Mac: read pages that have no text (then build again)
+    build --translations TDIR --data DATA                               # also Japanese translations of English pages
 
 The list is content/ja-sources.json. Each entry is one file, or one chapter of a document split into several files
 (entries with the same "group", in "part" order, become one PDF so page numbers run through the whole book).
@@ -191,7 +192,7 @@ def html_page(raw, title, source_url):
     return page, text
 
 
-def build(entries, downloads, out):
+def build(entries, downloads, out, translations=None, data=None):
     downloads, out = Path(downloads), Path(out)
     manifest = json.loads((downloads / 'fetched.json').read_text(encoding='utf-8')) if (downloads / 'fetched.json').exists() else {}
     lib = out / 'library-data'
@@ -248,6 +249,10 @@ def build(entries, downloads, out):
         rec['bytes'] = dest.stat().st_size
         rec['sha256'] = sha256(dest)
         records.append(rec)
+    if translations:
+        r2, rows2 = translated(Path(translations), lib, data)
+        records += r2
+        rows += rows2
     src_page, src_text = sources_page(records)
     (lib / 'pages' / 'ja' / 'ja-sources.html').write_text(src_page, encoding='utf-8')
     records.append({'id': 'ja-sources', 'kind': 'html', 'title': '日本語の資料の出典と利用条件', 'publisher': 'Lastbook 日本語版',
@@ -264,6 +269,100 @@ def build(entries, downloads, out):
     (lib / 'summary.json').write_text(json.dumps(summary(records), indent=1), encoding='utf-8')
     print(f'{len(records)} records, {len(rows)} pages of text, {n} rows in the Japanese index' + (f'; not downloaded: {", ".join(missing)}' if missing else ''))
     return records, missing
+
+
+TR_NOTE = 'Claude（AI）による日本語訳です。専門家の確認は受けていません。数値・手順・警告は、必ず原文のページで確かめてください。'
+
+
+def tr_id(doc, page):
+    """The record id of the Japanese translation of one page of an English source (page 0: a web page)."""
+    return f'ja-tr-{doc}-p{page or 0}'
+
+
+def md_html(md):
+    """The small Markdown the translators write (## headings, - lists, ⚠ warnings, paragraphs) as HTML."""
+    out, para, inlist = [], [], False
+
+    def flush():
+        nonlocal para
+        if para:
+            out.append('<p>' + html.escape(' '.join(para)) + '</p>')
+            para = []
+    for line in md.splitlines():
+        t = line.strip()
+        if not t:
+            flush()
+            if inlist:
+                out.append('</ul>')
+                inlist = False
+            continue
+        m = re.match(r'^(#{1,4})\s+(.*)$', t)
+        if m:
+            flush()
+            if inlist:
+                out.append('</ul>')
+                inlist = False
+            n = min(len(m.group(1)) + 1, 4)
+            out.append(f'<h{n}>{html.escape(m.group(2))}</h{n}>')
+        elif re.match(r'^[-*・]\s+', t):
+            flush()
+            if not inlist:
+                out.append('<ul>')
+                inlist = True
+            out.append('<li>' + html.escape(re.sub(r'^[-*・]\s+', '', t)) + '</li>')
+        elif t.startswith('⚠'):
+            flush()
+            out.append('<p class="warn"><strong>' + html.escape(t) + '</strong></p>')
+        else:
+            para.append(t)
+    flush()
+    if inlist:
+        out.append('</ul>')
+    return '\n'.join(out)
+
+
+def translated(tdir, lib, data=None):
+    """Records and search rows for tdir/ja/<doc>__p<page>.md, the Japanese translations of English pages."""
+    orig = {}
+    if data:
+        orig = {r['id']: r for r in json.loads((Path(data) / 'library-data' / 'catalog.json').read_text(encoding='utf-8'))}
+    (lib / 'pages' / 'ja' / 'tr').mkdir(parents=True, exist_ok=True)
+    records, rows = [], []
+    for f in sorted((tdir / 'ja').glob('*.md')):
+        doc, _, page = f.stem.rpartition('__p')
+        if not doc or not page.isdigit():
+            continue
+        page = int(page)
+        md = f.read_text(encoding='utf-8').strip()
+        if not md:
+            continue
+        head = {}
+        src = tdir / 'src' / (f.stem + '.txt')
+        if src.exists():
+            for line in src.read_text(encoding='utf-8').split('========', 1)[0].splitlines():
+                k, _, v = line.partition(': ')
+                head[k] = v.strip()
+        o = orig.get(doc, {})
+        title_en = o.get('title') or head.get('SOURCE') or doc
+        where = f'{page}ページ' if page else 'Webページ'
+        title = f'【日本語訳】{title_en}（{where}）'
+        rid = tr_id(doc, page)
+        page_html = ('<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>' + html.escape(title) + '</title>'
+                     '<style>.warn{border-left:4px solid #b4442c;padding-left:8px}.tr-note{background:#f3efe4;padding:8px;border-radius:6px}</style></head><body>'
+                     f'<h1>{html.escape(title)}</h1><p class="tr-note">原文：{html.escape(title_en)}（{html.escape(o.get("publisher") or head.get("PUBLISHER") or "")}）{where}、英語。{TR_NOTE}</p>'
+                     + md_html(md) + '</body></html>')
+        dest = lib / 'pages' / 'ja' / 'tr' / f'{rid}.html'
+        dest.write_text(page_html, encoding='utf-8')
+        text = re.sub(r'^[#\-*・⚠\s]+', '', md, flags=re.M)
+        rec = {'id': rid, 'kind': 'html', 'title': title, 'publisher': o.get('publisher') or head.get('PUBLISHER') or '',
+               'collection': '日本語訳（AI）', 'category': o.get('category') or 'reference', 'path': f'pages/ja/tr/{dest.name}',
+               'language': 'ja', 'translation_of': {'doc': doc, 'page': page or None},
+               'license': 'AIによる翻訳・個人利用のみ（原文の権利は発行元）', 'notes': TR_NOTE,
+               'bytes': dest.stat().st_size, 'sha256': sha256(dest)}
+        records.append(rec)
+        rows.append((rid, title, rec['collection'], rec['category'], rec['path'], 1, text))
+    print(f'{len(records)} translated pages', flush=True)
+    return records, rows
 
 
 def sources_page(records):
@@ -346,6 +445,7 @@ def main(argv=None):
     ap.add_argument('--out')
     ap.add_argument('--addon')
     ap.add_argument('--data')
+    ap.add_argument('--translations', help='build: a folder with ja/<doc>__p<page>.md translations (and src/ beside them)')
     ap.add_argument('--only', nargs='*', help='fetch only these ids or groups')
     ap.add_argument('--no-zim', action='store_true', help='fetch no encyclopedias (they are large; fetch them on their own)')
     a = ap.parse_args(argv)
@@ -353,7 +453,7 @@ def main(argv=None):
         failed = fetch(load(a.sources), a.downloads, set(a.only or []), zim=not a.no_zim)
         sys.exit(1 if failed else 0)
     if a.command == 'build':
-        build(load(a.sources), a.downloads, a.out)
+        build(load(a.sources), a.downloads, a.out, a.translations, a.data)
     if a.command == 'install':
         install(a.addon, a.data)
     if a.command == 'ocr':

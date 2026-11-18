@@ -194,4 +194,5 @@ lbWords('ja', {
   'unknown document': '不明な資料です',
   'not found': '見つかりません',
   'The local assistant model is not running right now.': 'ローカルのアシスタントモデルがいま動いていません。',
+  'AI translation (not checked by an expert)': 'AI翻訳（専門家の確認なし）',
 });

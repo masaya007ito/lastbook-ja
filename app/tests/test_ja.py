@@ -296,6 +296,43 @@ class JapanesePagesInGuides(unittest.TestCase):
                 self.assertNotIn('ja-not-here', [i.get('doc') for i in burn('ja')['read']])
                 self.assertNotIn('ja-manual', [i.get('doc') for i in burn('en')['read']])          # English guides as they were
 
+    def test_a_translated_page_comes_just_before_its_original(self):
+        import server
+        burn = json.loads((ROOT / 'content' / 'topics' / 'hurt.json').read_text(encoding='utf-8'))
+        first = next(c for c in burn['choices'] if c['id'] == 'burn')['read'][0]
+        tid = f"ja-tr-{first['doc']}-p{first.get('page') or 0}"
+        with tempfile.TemporaryDirectory() as tmp:
+            lib = Path(tmp)
+            (lib / 'catalog.json').write_text(json.dumps([{'id': first['doc'], 'kind': 'pdf', 'path': 'documents/x.pdf', 'title': 'Burns'},
+                                                          {'id': tid, 'kind': 'html', 'path': 'pages/ja/tr/x.html', 'title': '【日本語訳】Burns'}]), encoding='utf-8')
+            with patch.object(server, 'LIB', lib), patch.dict(server._cat, {'mtime': None}), patch.object(server, 'local_reads', lambda lang: {}):
+                pick = lambda lang: next(c for t in server.topics_resolved(lang) if t['id'] == 'hurt' for c in t['choices'] if c['id'] == 'burn')['read']
+                ja = pick('ja')
+                self.assertEqual([i['doc'] for i in ja[:2]], [tid, first['doc']])
+                self.assertTrue(ja[0]['translated'])
+                self.assertEqual(server.trust({'translation_of': {'doc': 'x'}, 'publisher': 'FEMA'})[0], 'AI translation (not checked by an expert)')
+                self.assertIn('AI', ja[0]['note'])
+                self.assertNotIn(tid, [i['doc'] for i in pick('en')])                  # English: no translation
+
+    def test_translations_become_records(self):
+        import ja_library as J
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            (t / 'ja').mkdir()
+            (t / 'src').mkdir()
+            (t / 'src' / 'doc1__p5.txt').write_text('SOURCE: Water Manual\nPUBLISHER: Agency\nPAGE: 5\n========\nBoil water.', encoding='utf-8')
+            (t / 'ja' / 'doc1__p5.md').write_text('## 煮沸\n\n水を煮沸します。\n\n- 1分間\n⚠ 飲まないでください。', encoding='utf-8')
+            (t / 'lib' / 'pages').mkdir(parents=True)
+            recs, rows = J.translated(t, t / 'lib')
+            self.assertEqual(recs[0]['id'], 'ja-tr-doc1-p5')
+            self.assertEqual(recs[0]['translation_of'], {'doc': 'doc1', 'page': 5})
+            page = (t / 'lib' / recs[0]['path']).read_text(encoding='utf-8')
+            self.assertIn('<h3>煮沸</h3>', page)
+            self.assertIn('<li>1分間</li>', page)
+            self.assertIn('class="warn"', page)
+            self.assertIn('Water Manual', page)
+            self.assertIn('煮沸', rows[0][6])
+
     def test_the_page_list_points_at_real_places(self):
         import check_ja_local
         f = ROOT / 'content' / 'local-ja.json'

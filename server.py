@@ -116,6 +116,8 @@ TRUST = [  # (pattern on publisher+collection, label shown to people, ranking we
 
 
 def trust(r):
+    if r.get('translation_of'):   # tools/ja_library.py: a machine translation keeps its original's publisher, not its standing
+        return 'AI translation (not checked by an expert)', 0.9
     s = f"{r.get('publisher', '')} {r.get('collection', '')} {r.get('category', '')}"
     for rx, label, w in TRUST:
         if re.search(rx, s):
@@ -230,6 +232,9 @@ def resolve_item(i):
     return i
 
 
+TR_NOTE = {'ja': '（この項目は原文を AI が日本語に訳したものです。専門家の確認はありません。数値や手順は原文で確かめてください。）'}
+
+
 def local_reads(lang):
     """Pages of sources in this language, read first in a guide: content/local-<lang>.json, {topic: {choices: {choice id:
     [items]}, route: {...}, prepare: [items], learn: [items]}}. A source this library does not hold is left out, as any is."""
@@ -255,8 +260,18 @@ def topics_resolved(lang='en'):
     zims = zim_names()
     local = local_reads(lang)
 
+    by_id = catalog()['by_id'] if lang != 'en' else {}
+
+    def with_translations(items):
+        """A page that has a translation into this language in the library is preceded by it (tools/ja_library.py)."""
+        for i in items:
+            tid = i.get('doc') and f"{lang}-tr-{i['doc']}-p{i.get('page') or 0}"
+            if tid and tid in by_id:
+                yield dict(i, doc=tid, page=None, translated=True, note=(i.get('note') or '') + TR_NOTE.get(lang, ''))
+            yield i
+
     def here(items):
-        return [resolve_item(i) for i in items if item_here(i, zims)]
+        return [resolve_item(i) for i in with_translations(items) if item_here(i, zims)]
 
     def still_useful(step):  # one that had things to open and has none left
         return step.get('goto') or step['read'] or not step['had']
