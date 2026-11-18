@@ -322,6 +322,57 @@ class JapaneseLibraryTool(unittest.TestCase):
             con.close()
 
 
+def chars(spec):
+    """Characters of a PDF page for ja_library.mend: (text, left, bottom, height) laid out one character 10 wide,
+    each piece followed by the reader's own line break unless it is the last."""
+    out = []
+    for n, (s, left, bottom, height) in enumerate(spec):
+        out += [[ch, False, left + 10 * i, bottom, height] for i, ch in enumerate(s)]
+        if n < len(spec) - 1:
+            out += [['\r', True, 0, 0, 0], ['\n', True, 0, 0, 0]]
+    return out, ''.join(c[0] for c in out)
+
+
+class PdfText(unittest.TestCase):
+    """Ruby printed inline and lines read right to left are mended before the text is indexed."""
+
+    def test_ruby_is_dropped_and_the_word_joined(self):
+        import ja_library as J
+        # 心肺 with the small reading しんぱい over each kanji, read in between, as a PDF reader gives it.
+        got = J.mend(*chars([('心', 0, 0, 14), ('しん', 0, 10, 7), ('肺', 30, 0, 14), ('ぱい', 30, 10, 7), ('蘇生', 60, 0, 14)]))
+        self.assertEqual(got, '心肺蘇生')
+        self.assertIn('心肺蘇生', ja_search.unwrap(got))
+
+    def test_small_text_throughout_is_kept(self):
+        import ja_library as J
+        page = chars([('注意：火の元を確かめる', 0, 0, 7)])
+        self.assertEqual(J.mend(*page), '注意：火の元を確かめる')
+        # A large heading, then smaller text beside it and on the line below: neither is ruby.
+        page = chars([('注意', 0, 40, 20), ('ケガに', 45, 40, 10), ('あわてて飛びださない', 0, 0, 10)])
+        self.assertEqual(J.mend(*page), '注意\nケガに\nあわてて飛びださない')
+        # A headline: a small line set above a large one runs past its kanji.
+        page = chars([('あなたとペットは', 0, 30, 10), ('大丈夫？', 0, 0, 20)])
+        self.assertEqual(J.mend(*page), 'あなたとペットは\n大丈夫？')
+        # A page turned on its side: the next character reads as higher up, but it is not ruby.
+        side = [[ch, False, 0, 10 * i, 10 if ch in '水害' else 6] for i, ch in enumerate('水害リスク')]
+        self.assertEqual(J.mend(side, '水害リスク'), '水害リスク')
+
+    def test_a_line_read_right_to_left_is_put_back_in_page_order(self):
+        import ja_library as J
+        # 「最新の情報を確認しましょう。（代表）」 read in two pieces, the second first, with the bracket turned around.
+        out = [[ch, False, 70 + 10 * i, 0, 10] for i, ch in enumerate('確認しましょう。')]
+        out += [[ch, False, 10 * i, 0, 10] for i, ch in enumerate('最新の情報を(')]
+        text = ''.join(c[0] for c in out)
+        self.assertEqual(J.mend(out, text), '最新の情報を)確認しましょう。')
+
+    def test_a_page_in_order_is_returned_as_read(self):
+        import ja_library as J
+        page = chars([('止血の方法', 0, 20, 10), ('傷口を押さえる', 0, 0, 10)])
+        self.assertEqual(J.mend(*page), '止血の方法\n傷口を押さえる')
+        vertical = [[ch, False, 0, 100 - 10 * i, 10] for i, ch in enumerate('縦書きの文')]
+        self.assertEqual(J.mend(vertical, '縦書きの文'), '縦書きの文')   # one column: not a line read backwards
+
+
 class JapanesePagesInGuides(unittest.TestCase):
     def test_japanese_pages_come_first_and_only_when_held(self):
         import server
